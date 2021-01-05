@@ -1,0 +1,19 @@
+# Byte-compiled / optimized /
+*/__pycache__
+*/*/__pycache__
+*/*/*/__pycache__
+*/*/*/*/_pycache__
+*.py[cod]
+.__pycache__
+._*
+.DS_Store
+*$py.class
+
+# edictor
+.vscode
+.idea
+
+
+# Env
+.env
+.venv
