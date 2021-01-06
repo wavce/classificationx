@@ -262,7 +262,8 @@ def Res2Net50V1B_26W4S(convolution='conv2d',
                        input_shape=None, 
                        input_tensor=None,
                        num_classes=1000, 
-                       drop_rate=0.5):
+                       drop_rate=0.5,
+                       **kwargs):
     return Res2Net("res2net50v1b_26w4s", 
                    num_blocks=[3, 4, 6, 3],
                    convolution=convolution, 
@@ -278,7 +279,8 @@ def Res2Net50V1B_26W4S(convolution='conv2d',
                    base_width=26, 
                    scale=4, 
                    num_classes=num_classes, 
-                   drop_rate=drop_rate).build_model()
+                   drop_rate=drop_rate,
+                   **kwargs).build_model()
 
 
 @MODELS.register("Res2Net101V1B_26W4S")
@@ -293,7 +295,8 @@ def Res2Net101V1B_26W4S(convolution='conv2d',
                         input_shape=None, 
                         input_tensor=None,
                         num_classes=1000, 
-                        drop_rate=0.5):
+                        drop_rate=0.5,
+                        **kwargs):
     return Res2Net("res2net101v1b_26w4s", 
                    num_blocks=[3, 4, 23, 3],
                    convolution=convolution, 
@@ -309,7 +312,8 @@ def Res2Net101V1B_26W4S(convolution='conv2d',
                    base_width=26, 
                    scale=4, 
                    num_classes=num_classes, 
-                   drop_rate=drop_rate).build_model()
+                   drop_rate=drop_rate,
+                   **kwargs).build_model()
 
 
 @MODELS.register("Res2Net50V1B_26W6S")
@@ -324,7 +328,8 @@ def Res2Net50V1B_26W6S(convolution='conv2d',
                        input_shape=None, 
                        input_tensor=None,
                        num_classes=1000, 
-                       drop_rate=0.5):
+                       drop_rate=0.5,
+                       **kwargs):
     return Res2Net("res2net50v1b_26w6s", 
                    num_blocks=[3, 4, 6, 3],
                    convolution=convolution, 
@@ -340,7 +345,8 @@ def Res2Net50V1B_26W6S(convolution='conv2d',
                    base_width=26, 
                    scale=6, 
                    num_classes=num_classes, 
-                   drop_rate=drop_rate).build_model()
+                   drop_rate=drop_rate,
+                   **kwargs).build_model()
 
 
 @MODELS.register("Res2Net50V1B_26W8S")
@@ -355,7 +361,8 @@ def Res2Net50V1B_26W8S(convolution='conv2d',
                        input_shape=None, 
                        input_tensor=None,
                        num_classes=1000, 
-                       drop_rate=0.5):
+                       drop_rate=0.5,
+                       **kwargs):
     return Res2Net("res2net50v1b_26w8s", 
                    num_blocks=[3, 4, 6, 3],
                    convolution=convolution, 
@@ -371,7 +378,8 @@ def Res2Net50V1B_26W8S(convolution='conv2d',
                    base_width=26, 
                    scale=8, 
                    num_classes=num_classes, 
-                   drop_rate=drop_rate).build_model()
+                   drop_rate=drop_rate,
+                   **kwargs).build_model()
 
 
 @MODELS.register("Res2Net50V1B_48W2S")
@@ -386,7 +394,8 @@ def Res2Net50V1B_48W2S(convolution='conv2d',
                        input_shape=None, 
                        input_tensor=None,
                        num_classes=1000, 
-                       drop_rate=0.5):
+                       drop_rate=0.5,
+                       **kwargs):
     return Res2Net("res2net50v1b_48w2s", 
                    num_blocks=[3, 4, 6, 3],
                    convolution=convolution, 
@@ -402,7 +411,8 @@ def Res2Net50V1B_48W2S(convolution='conv2d',
                    base_width=48, 
                    scale=2, 
                    num_classes=num_classes, 
-                   drop_rate=drop_rate).build_model()
+                   drop_rate=drop_rate,
+                   **kwargs).build_model()
 
 
 @MODELS.register("Res2Net50V1B_14W8S")
@@ -417,7 +427,8 @@ def Res2Net50V1B_14W8S(convolution='conv2d',
                        input_shape=None, 
                        input_tensor=None,
                        num_classes=1000, 
-                       drop_rate=0.5):
+                       drop_rate=0.5,
+                       **kwargs):
     return Res2Net("res2net50V1B_14w8s", 
                    num_blocks=[3, 4, 6, 3],
                    convolution=convolution, 
@@ -433,7 +444,8 @@ def Res2Net50V1B_14W8S(convolution='conv2d',
                    base_width=14, 
                    scale=8, 
                    num_classes=num_classes, 
-                   drop_rate=drop_rate).build_model()
+                   drop_rate=drop_rate,
+                   **kwargs).build_model()
 
 
 def _get_weight_name_map(blocks, scale):

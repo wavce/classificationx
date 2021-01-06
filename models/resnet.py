@@ -276,7 +276,8 @@ def ResNet18(normalization=dict(normalization="batch_norm", momentum=0.9, epsilo
              num_classes=1000,
              drop_rate=0.5,
              input_shape=(224, 224, 3),
-             input_tensor=None):
+             input_tensor=None,
+             **kwargs):
     return ResNet(name="resnet18",
                   blocks=[2, 2, 2, 2],
                   block_fn=BasicBlock,
@@ -289,7 +290,8 @@ def ResNet18(normalization=dict(normalization="batch_norm", momentum=0.9, epsilo
                   num_classes=num_classes,
                   drop_rate=drop_rate,
                   input_shape=input_shape,
-                  input_tensor=input_tensor).build_model()   
+                  input_tensor=input_tensor,
+                  **kwargs).build_model()   
 
 
 @MODELS.register("ResNet34")
@@ -303,7 +305,8 @@ def ResNet34(normalization=dict(normalization="batch_norm", momentum=0.9, epsilo
              num_classes=1000,
              drop_rate=0.5,
              input_shape=(224, 224, 3),
-             input_tensor=None):
+             input_tensor=None,
+             **kwargs):
     return ResNet(name="resnet34",
                   blocks=[3, 4, 6, 3],
                   block_fn=BasicBlock,
@@ -316,7 +319,8 @@ def ResNet34(normalization=dict(normalization="batch_norm", momentum=0.9, epsilo
                   num_classes=num_classes,
                   drop_rate=drop_rate,
                   input_shape=input_shape,
-                  input_tensor=input_tensor).build_model()   
+                  input_tensor=input_tensor,
+                  **kwargs).build_model()   
 
 
 @MODELS.register("ResNet50")
@@ -330,7 +334,8 @@ def ResNet50(normalization=dict(normalization="batch_norm", momentum=0.9, epsilo
              num_classes=1000,
              drop_rate=0.5,
              input_shape=(224, 224, 3),
-             input_tensor=None):
+             input_tensor=None,
+             **kwargs):
 
     return ResNet(name="resnet50",
                   blocks=[3, 4, 6, 3],
@@ -345,7 +350,8 @@ def ResNet50(normalization=dict(normalization="batch_norm", momentum=0.9, epsilo
                   num_classes=num_classes,
                   input_shape=input_shape,
                   input_tensor=input_tensor,
-                  drop_rate=drop_rate).build_model()
+                  drop_rate=drop_rate,
+                  **kwargs).build_model()
 
 
 @MODELS.register("ResNet101")
@@ -360,7 +366,8 @@ def ResNet101(convolution="conv2d",
               num_classes=1000,
               drop_rate=0.5,
               input_shape=(224, 224, 3),
-              input_tensor=None):
+              input_tensor=None,
+              **kwargs):
     return ResNet(name="resnet101",
                   blocks=[3, 4, 23, 3],
                   block_fn=Bottleneck,
@@ -375,7 +382,8 @@ def ResNet101(convolution="conv2d",
                   num_classes=num_classes,
                   input_shape=input_shape,
                   input_tensor=input_tensor,
-                  drop_rate=drop_rate).build_model()
+                  drop_rate=drop_rate,
+                  **kwargs).build_model()
 
 
 @MODELS.register("ResNet152")
@@ -390,7 +398,8 @@ def ResNet152(convolution="conv2d",
               num_classes=1000,
               drop_rate=0.5,
               input_shape=(224, 224, 3),
-              input_tensor=None):
+              input_tensor=None,
+              **kwargs):
     
     return ResNet(name="resnet152",
                   blocks=[3, 8, 36, 3],
@@ -406,7 +415,8 @@ def ResNet152(convolution="conv2d",
                   num_classes=num_classes,
                   input_shape=input_shape,
                   input_tensor=input_tensor,
-                  drop_rate=drop_rate).build_model()
+                  drop_rate=drop_rate,
+                  **kwargs).build_model()
 
 
 def _get_weight_name_map(blocks):

@@ -242,7 +242,8 @@ def Res2NeXt50(convolution='conv2d',
                input_shape=None, 
                input_tensor=None,
                num_classes=1000, 
-               drop_rate=0.5):
+               drop_rate=0.5,
+               **kwargs):
     return Res2NeXt("res2next50", 
                     num_blocks=[3, 4, 6, 3],
                     convolution=convolution, 
@@ -259,7 +260,8 @@ def Res2NeXt50(convolution='conv2d',
                     cardinality=8,
                     scale=4, 
                     num_classes=num_classes, 
-                    drop_rate=drop_rate).build_model()
+                    drop_rate=drop_rate,
+                    **kwargs).build_model()
 
 
 def _get_weight_name_map(blocks, scale):

@@ -297,7 +297,8 @@ def ResNeXt50_32X4D(convolution='conv2d',
                     dropblock=None, 
                     last_gamma=False, 
                     num_classes=1000, 
-                    drop_rate=0.5):
+                    drop_rate=0.5,
+                    **kwargs):
     return ResNeXt("resnext50_32x4d", 
                    deep_stem=False, 
                    block_fn=BottleneckX, 
@@ -319,7 +320,8 @@ def ResNeXt50_32X4D(convolution='conv2d',
                    last_gamma=last_gamma, 
                    avg_down=False, 
                    num_classes=num_classes, 
-                   drop_rate=drop_rate).build_model()
+                   drop_rate=drop_rate,
+                   ).build_model()
 
 
 @MODELS.register("ResNeXt101_32X4D")
