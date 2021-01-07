@@ -39,8 +39,9 @@ def build_normalization(**kwargs):
 
 def build_activation(**kwargs):
     activation = kwargs.pop("activation")
-    # if "swish" == activation:
-    #     return Swish(**kwargs)
+    if "leaky_relu" == activation:
+        alpha = kwargs.pop("alpha")
+        return tf.keras.layers.LeakyReLU(alpha=alpha)
     return tf.keras.layers.Activation(activation, **kwargs)
 
 

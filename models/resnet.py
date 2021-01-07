@@ -177,7 +177,6 @@ class ResNet(Model):
                  strides=(2, 2, 2, 2, 2),
                  dilation_rates=(1, 1, 1, 1, 1),
                  frozen_stages=(-1,),
-                 weight_decay=0.,
                  dropblock=None,
                  num_classes=1000,
                  drop_rate=0.5,
