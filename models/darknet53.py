@@ -61,13 +61,10 @@ def darknet53(convolution="conv2d",
         else:
             inputs = input_tensor
     
-    _rgb_mean = np.array([0.485, 0.456, 0.406])
-    _rgb_std = np.array([0.229, 0.224, 0.225])
 
     def _norm(inp):
-            inp -= (tf.convert_to_tensor(_rgb_mean * 255., inp.dtype))
-            inp /= (tf.convert_to_tensor(_rgb_std * 255., inp.dtype))
-            return inp
+        inp /= 255
+        return inp
 
     x = tf.keras.layers.Lambda(_norm, name="norm_input")(inputs)
     x = ConvNormActBlock(filters=32,
@@ -90,7 +87,7 @@ def darknet53(convolution="conv2d",
                          activation=activation,
                          data_format=data_format,
                          name="conv2")(x)
-    x = residual_block(x, 64, dilation_rates[0], 2, data_format, normalization, activation, 1 not in frozen_stages, 3)
+    x = residual_block(x, 64, dilation_rates[0], 2, data_format, normalization, activation, "glorot_uniform", 1 not in frozen_stages, 3)
     outputs = [x]
 
     x = ConvNormActBlock(filters=128,
@@ -104,7 +101,7 @@ def darknet53(convolution="conv2d",
                          data_format=data_format,
                          name="conv5")(x)
     for i in range(2):
-        x = residual_block(x, 128, dilation_rates[1], 2, data_format, normalization, activation, 2 not in frozen_stages, 6 + i * 2)
+        x = residual_block(x, 128, dilation_rates[1], 2, data_format, normalization, activation, "glorot_uniform", 2 not in frozen_stages, 6 + i * 2)
     outputs.append(x)
 
     x = ConvNormActBlock(filters=256,
@@ -118,7 +115,7 @@ def darknet53(convolution="conv2d",
                          data_format=data_format,
                          name="conv10")(x)
     for i in range(8):
-        x = residual_block(x, 256, dilation_rates[2], 2, data_format, normalization, activation, 3 not in frozen_stages, 11 + i * 2)
+        x = residual_block(x, 256, dilation_rates[2], 2, data_format, normalization, activation, "glorot_uniform", 3 not in frozen_stages, 11 + i * 2)
     outputs.append(x)
 
     x = ConvNormActBlock(filters=512,
@@ -132,7 +129,7 @@ def darknet53(convolution="conv2d",
                          data_format=data_format,
                          name="conv27")(x)
     for i in range(8):
-        x = residual_block(x, 512, dilation_rates[3], 2, data_format, normalization, activation, 4 not in frozen_stages, 28 + i * 2)
+        x = residual_block(x, 512, dilation_rates[3], 2, data_format, normalization, activation, "glorot_uniform", 4 not in frozen_stages, 28 + i * 2)
     outputs.append(x)
 
     x = ConvNormActBlock(filters=1024,
@@ -146,7 +143,7 @@ def darknet53(convolution="conv2d",
                          data_format=data_format,
                          name="conv44")(x)
     for i in range(4):
-        x = residual_block(x, 1024, dilation_rates[4], 2, data_format, normalization, activation, 5 not in frozen_stages, 45 + i * 2)
+        x = residual_block(x, 1024, dilation_rates[4], 2, data_format, normalization, activation, "glorot_uniform", 5 not in frozen_stages, 45 + i * 2)
     outputs.append(x)
 
     if -1 in output_indices:
@@ -226,7 +223,7 @@ def csp_darknet53(convolution="conv2d",
                          activation=activation,
                          data_format=data_format,
                          name="conv4")(x)
-    x = residual_block(x, 64, dilation_rates[0], 1, data_format, normalization, activation, 1 not in frozen_stages, 5)
+    x = residual_block(x, 64, dilation_rates[0], 1, data_format, normalization, activation, "glorot_uniform", 1 not in frozen_stages, 5)
     x = ConvNormActBlock(filters=64,
                          kernel_size=1,
                          strides=1,
@@ -282,7 +279,7 @@ def csp_darknet53(convolution="conv2d",
                          data_format=data_format,
                          name="conv11")(x)
     for i in range(2):
-        x = residual_block(x, 64, dilation_rates[1], 1, data_format, normalization, activation, 2 not in frozen_stages, 12 + i * 2)
+        x = residual_block(x, 64, dilation_rates[1], 1, data_format, normalization, activation, "glorot_uniform", 2 not in frozen_stages, 12 + i * 2)
     x = ConvNormActBlock(filters=128,
                          kernel_size=1,
                          strides=1,
@@ -337,7 +334,7 @@ def csp_darknet53(convolution="conv2d",
                          data_format=data_format,
                          name="conv20")(x)
     for i in range(8):
-        x = residual_block(x, 256, dilation_rates[2], 1, data_format, normalization, activation, 3 not in frozen_stages, 21 + i * 2)
+        x = residual_block(x, 256, dilation_rates[2], 1, data_format, normalization, activation, "glorot_uniform", 3 not in frozen_stages, 21 + i * 2)
     x = ConvNormActBlock(filters=256,
                          kernel_size=1,
                          strides=1,
@@ -392,7 +389,7 @@ def csp_darknet53(convolution="conv2d",
                          data_format=data_format,
                          name="conv41")(x)
     for i in range(8):
-        x = residual_block(x, 256, dilation_rates[3], 1, data_format, normalization, activation, 4 not in frozen_stages, 42 + i * 2)
+        x = residual_block(x, 256, dilation_rates[3], 1, data_format, normalization, activation, "glorot_uniform", 4 not in frozen_stages, 42 + i * 2)
     x = ConvNormActBlock(filters=256,
                          kernel_size=1,
                          strides=1,
@@ -447,7 +444,7 @@ def csp_darknet53(convolution="conv2d",
                          data_format=data_format,
                          name="conv62")(x)
     for i in range(4):
-        x = residual_block(x, 512, dilation_rates[4], 1, data_format, normalization, activation, 5 not in frozen_stages, 63 + i * 2)
+        x = residual_block(x, 512, dilation_rates[4], 1, data_format, normalization, activation, "glorot_uniform", 5 not in frozen_stages, 63 + i * 2)
     x = ConvNormActBlock(filters=512,
                          kernel_size=1,
                          strides=1,
