@@ -38,8 +38,92 @@ def residual_block(inputs,
     return x
 
 
+def _make_stage(x, n, filters, stride, dilation_rate, expansion, data_format, normalization, activation, kernel_initializer="glorot_uniform", trainable=True, index=0):
+    x = ConvNormActBlock(filters=filters,
+                         kernel_size=3,
+                         strides=stride,
+                         dilation_rate=1 if stride == 2 else dilation_rate,
+                         trainable=trainable,
+                         kernel_initializer=kernel_initializer,
+                         normalization=normalization,
+                         activation=activation,
+                         data_format=data_format,
+                         name="conv%d" % index)(x)
+    for i in range(n):
+        x = residual_block(x, filters, dilation_rate, 2, data_format, normalization, activation, kernel_initializer, trainable, index + 1 + i * 2)
+    
+    return x
+
+
+def _make_csp_stage(x, n, filters, stride, dilation_rate, expansion, data_format, normalization, activation, kernel_initializer="glorot_uniform", trainable=True, index=0):
+    x = ConvNormActBlock(filters=filters,
+                         kernel_size=3,
+                         strides=stride,
+                         dilation_rate=dilation_rate,
+                         trainable=trainable,
+                         kernel_initializer=kernel_initializer,
+                         normalization=normalization,
+                         activation=activation,
+                         data_format=data_format,
+                         name="conv%d" % index)(x)
+    index += 1
+    midfilters = filters if filters == 64 else filters // 2
+    route = ConvNormActBlock(filters=midfilters,
+                             kernel_size=1,
+                             strides=1,
+                             dilation_rate=dilation_rate,
+                             trainable=trainable,
+                             kernel_initializer=kernel_initializer,
+                             normalization=normalization,
+                             activation=activation,
+                             data_format=data_format,
+                             name="conv%d" % index)(x)
+    index += 1
+    x = ConvNormActBlock(filters=midfilters,
+                         kernel_size=1,
+                         strides=1,
+                         dilation_rate=dilation_rate,
+                         trainable=trainable,
+                         kernel_initializer=kernel_initializer,
+                         normalization=normalization,
+                         activation=activation,
+                         data_format=data_format,
+                         name="conv%d" % index)(x)
+    index += 1
+    for _ in range(n):
+        x = residual_block(x, midfilters, dilation_rate, expansion, data_format, normalization, activation, kernel_initializer, trainable, index)
+        index += 2
+
+
+    x = ConvNormActBlock(filters=midfilters,
+                         kernel_size=1,
+                         strides=1,
+                         dilation_rate=dilation_rate,
+                         trainable=trainable,
+                         kernel_initializer=kernel_initializer,
+                         normalization=normalization,
+                         activation=activation,
+                         data_format=data_format,
+                         name="conv%d" % index)(x)
+    index += 1
+    channels_axis = -1 if data_format == "channels_last" else 1
+    x = tf.keras.layers.Concatenate(axis=channels_axis)([x, route])
+    x = ConvNormActBlock(filters=filters,
+                         kernel_size=1,
+                         strides=1,
+                         dilation_rate=dilation_rate,
+                         trainable=trainable,
+                         kernel_initializer=kernel_initializer,
+                         normalization=normalization,
+                         activation=activation,
+                         data_format=data_format,
+                         name="conv%d" % index)(x)
+
+    return x
+
+
 @MODELS.register("DarkNet53")
-def darknet53(normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+def Darknet53(normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
               activation=dict(activation="leaky_relu", alpha=0.1),
               output_indices=(-1, ),
               strides=(2, 2, 2, 2, 2),
@@ -49,6 +133,7 @@ def darknet53(normalization=dict(normalization="batch_norm", momentum=0.9, epsil
               num_classes=1000,
               drop_rate=0.5,
               input_shape=(224, 224, 3),
+              kernel_initializer="glorot_uniform",
               input_tensor=None,
               data_format="channels_last"):
     
@@ -71,78 +156,20 @@ def darknet53(normalization=dict(normalization="batch_norm", momentum=0.9, epsil
                          strides=1,
                          dilation_rate=dilation_rates[0],
                          trainable=1 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
+                         kernel_initializer=kernel_initializer,
                          normalization=normalization,
                          activation=activation,
                          data_format=data_format,
                          name="conv1")(x)
-    x = ConvNormActBlock(filters=64,
-                         kernel_size=3,
-                         strides=strides[0],
-                         dilation_rate=1,
-                         trainable=1 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv2")(x)
-    x = residual_block(x, 64, dilation_rates[0], 2, data_format, normalization, activation, "glorot_uniform", 1 not in frozen_stages, 3)
+    x = _make_stage(x, 1, 64, strides[0], dilation_rates[0], 2, data_format, normalization, activation, kernel_initializer, 1 not in frozen_stages, 2)
     outputs = [x]
-
-    x = ConvNormActBlock(filters=128,
-                         kernel_size=3,
-                         strides=strides[1],
-                         dilation_rate=1,
-                         trainable=2 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv5")(x)
-    for i in range(2):
-        x = residual_block(x, 128, dilation_rates[1], 2, data_format, normalization, activation, "glorot_uniform", 2 not in frozen_stages, 6 + i * 2)
+    x = _make_stage(x, 2, 128, strides[1], dilation_rates[1], 2, data_format, normalization, activation, kernel_initializer, 2 not in frozen_stages, 5)
     outputs.append(x)
-
-    x = ConvNormActBlock(filters=256,
-                         kernel_size=3,
-                         strides=strides[2],
-                         dilation_rate=1,
-                         trainable=3 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv10")(x)
-    for i in range(8):
-        x = residual_block(x, 256, dilation_rates[2], 2, data_format, normalization, activation, "glorot_uniform", 3 not in frozen_stages, 11 + i * 2)
+    x = _make_stage(x, 8, 256, strides[2], dilation_rates[2], 2, data_format, normalization, activation, kernel_initializer, 3 not in frozen_stages, 10)
     outputs.append(x)
-
-    x = ConvNormActBlock(filters=512,
-                         kernel_size=3,
-                         strides=strides[3],
-                         dilation_rate=1,
-                         trainable=4 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv27")(x)
-    for i in range(8):
-        x = residual_block(x, 512, dilation_rates[3], 2, data_format, normalization, activation, "glorot_uniform", 4 not in frozen_stages, 28 + i * 2)
+    x = _make_stage(x, 8, 512, strides[3], dilation_rates[3], 2, data_format, normalization, activation, kernel_initializer, 4 not in frozen_stages, 27)
     outputs.append(x)
-
-    x = ConvNormActBlock(filters=1024,
-                         kernel_size=3,
-                         strides=strides[4],
-                         dilation_rate=1,
-                         trainable=5 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv44")(x)
-    for i in range(4):
-        x = residual_block(x, 1024, dilation_rates[4], 2, data_format, normalization, activation, "glorot_uniform", 5 not in frozen_stages, 45 + i * 2)
+    x = _make_stage(x, 4, 1024, strides[4], dilation_rates[4], 2, data_format, normalization, activation, kernel_initializer, 5 not in frozen_stages, 44)
     outputs.append(x)
 
     if -1 in output_indices:
@@ -157,18 +184,19 @@ def darknet53(normalization=dict(normalization="batch_norm", momentum=0.9, epsil
 
 
 @MODELS.register("CSPDarkNet53")
-def csp_darknet53(normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
-                  activation=dict(activation="leaky_relu", alpha=0.1),
-                  output_indices=(-1, ),
-                  strides=(2, 2, 2, 2, 2),
-                  dilation_rates=(1, 1, 1, 1, 1),
-                  frozen_stages=(-1,),
-                  dropblock=None,
-                  num_classes=1000,
-                  drop_rate=0.5,
-                  input_shape=(224, 224, 3),
-                  input_tensor=None,
-                  data_format="channels_last"):
+def CSPDarknet53(normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+                 activation=dict(activation="leaky_relu", alpha=0.1),
+                 output_indices=(-1, ),
+                 strides=(2, 2, 2, 2, 2),
+                 dilation_rates=(1, 1, 1, 1, 1),
+                 frozen_stages=(-1,),
+                 dropblock=None,
+                 num_classes=1000,
+                 drop_rate=0.5,
+                 input_shape=(224, 224, 3),
+                 input_tensor=None,
+                 kernel_initializer = "glorot_uniform",
+                 data_format="channels_last"):
     
     if input_tensor is None:
         inputs = tf.keras.layers.Input(shape=input_shape)
@@ -177,8 +205,6 @@ def csp_darknet53(normalization=dict(normalization="batch_norm", momentum=0.9, e
             inputs = tf.keras.layers.Input(tensor=input_tensor, shape=input_shape)
         else:
             inputs = input_tensor
-    
-    channels_axis = -1 if data_format == "channels_last" else 1
 
     x = tf.keras.layers.Lambda(lambda inp: inp / 255., name="norm_input")(inputs)
     x = ConvNormActBlock(filters=32,
@@ -186,284 +212,20 @@ def csp_darknet53(normalization=dict(normalization="batch_norm", momentum=0.9, e
                          strides=1,
                          dilation_rate=dilation_rates[0],
                          trainable=1 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
+                         kernel_initializer=kernel_initializer,
                          normalization=normalization,
                          activation=activation,
                          data_format=data_format,
                          name="conv1")(x)
-    x = ConvNormActBlock(filters=64,
-                         kernel_size=3,
-                         strides=strides[0],
-                         dilation_rate=1,
-                         trainable=1 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv2")(x)
-    route = ConvNormActBlock(filters=64,
-                             kernel_size=1,
-                             strides=1,
-                             dilation_rate=dilation_rates[0],
-                             trainable=1 not in frozen_stages,
-                             kernel_initializer="glorot_uniform",
-                             normalization=normalization,
-                             activation=activation,
-                             data_format=data_format,
-                             name="conv3")(x)
-    x = ConvNormActBlock(filters=64,
-                         kernel_size=1,
-                         strides=1,
-                         dilation_rate=dilation_rates[0],
-                         trainable=1 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv4")(x)
-    x = residual_block(x, 64, dilation_rates[0], 1, data_format, normalization, activation, "glorot_uniform", 1 not in frozen_stages, 5)
-    x = ConvNormActBlock(filters=64,
-                         kernel_size=1,
-                         strides=1,
-                         dilation_rate=dilation_rates[0],
-                         trainable=1 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv7")(x)
-    x = tf.keras.layers.Concatenate(axis=channels_axis)([x, route])
-    x = ConvNormActBlock(filters=64,
-                         kernel_size=1,
-                         strides=1,
-                         dilation_rate=dilation_rates[0],
-                         trainable=1 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv8")(x)
+    x = _make_csp_stage(x, 1, 64, strides[0], dilation_rates[0], 2, data_format, normalization, activation, kernel_initializer, 1 not in frozen_stages, 2)
     outputs = [x]
-
-    # Downsample
-    x = ConvNormActBlock(filters=128,
-                         kernel_size=3,
-                         strides=strides[1],
-                         dilation_rate=1,
-                         trainable=2 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv9")(x)
-    route = ConvNormActBlock(filters=64,
-                             kernel_size=1,
-                             strides=1,
-                             dilation_rate=dilation_rates[1],
-                             trainable=2 not in frozen_stages,
-                             kernel_initializer="glorot_uniform",
-                             normalization=normalization,
-                             activation=activation,
-                             data_format=data_format,
-                             name="conv10")(x)
-    x = ConvNormActBlock(filters=64,
-                         kernel_size=1,
-                         strides=1,
-                         dilation_rate=dilation_rates[1],
-                         trainable=2 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv11")(x)
-    for i in range(2):
-        x = residual_block(x, 64, dilation_rates[1], 1, data_format, normalization, activation, "glorot_uniform", 2 not in frozen_stages, 12 + i * 2)
-    x = ConvNormActBlock(filters=128,
-                         kernel_size=1,
-                         strides=1,
-                         dilation_rate=dilation_rates[1],
-                         trainable=2 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv16")(x)
-    x = tf.keras.layers.Concatenate(axis=channels_axis)([x, route])
-    x = ConvNormActBlock(filters=128,
-                         kernel_size=1,
-                         strides=1,
-                         dilation_rate=dilation_rates[1],
-                         trainable=2 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv17")(x)
+    x = _make_csp_stage(x, 2, 128, strides[1], dilation_rates[1], 1, data_format, normalization, activation, kernel_initializer, 2 not in frozen_stages, 9)
     outputs.append(x)
-
-    x = ConvNormActBlock(filters=256,
-                         kernel_size=3,
-                         strides=strides[2],
-                         dilation_rate=1,
-                         trainable=3 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv18")(x)
-    route = ConvNormActBlock(filters=128,
-                             kernel_size=1,
-                             strides=1,
-                             dilation_rate=dilation_rates[2],
-                             trainable=3 not in frozen_stages,
-                             kernel_initializer="glorot_uniform",
-                             normalization=normalization,
-                             activation=activation,
-                             data_format=data_format,
-                             name="conv19")(x)
-    x = ConvNormActBlock(filters=128,
-                         kernel_size=1,
-                         strides=1,
-                         dilation_rate=dilation_rates[2],
-                         trainable=3 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv20")(x)
-    for i in range(8):
-        x = residual_block(x, 256, dilation_rates[2], 1, data_format, normalization, activation, "glorot_uniform", 3 not in frozen_stages, 21 + i * 2)
-    x = ConvNormActBlock(filters=256,
-                         kernel_size=1,
-                         strides=1,
-                         dilation_rate=dilation_rates[2],
-                         trainable=3 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv37")(x)
-    x = tf.keras.layers.Concatenate(axis=channels_axis)([x, route])
-    x = ConvNormActBlock(filters=256,
-                         kernel_size=1,
-                         strides=1,
-                         dilation_rate=dilation_rates[2],
-                         trainable=3 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv38")(x)
+    x = _make_csp_stage(x, 8, 256, strides[2], dilation_rates[2], 1, data_format, normalization, activation, kernel_initializer, 3 not in frozen_stages, 18)
     outputs.append(x)
-
-    x = ConvNormActBlock(filters=512,
-                         kernel_size=3,
-                         strides=strides[3],
-                         dilation_rate=1,
-                         trainable=4 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv39")(x)
-    route = ConvNormActBlock(filters=256,
-                             kernel_size=1,
-                             strides=1,
-                             dilation_rate=dilation_rates[3],
-                             trainable=4 not in frozen_stages,
-                             kernel_initializer="glorot_uniform",
-                             normalization=normalization,
-                             activation=activation,
-                             data_format=data_format,
-                             name="conv40")(x)
-    x = ConvNormActBlock(filters=256,
-                         kernel_size=1,
-                         strides=1,
-                         dilation_rate=dilation_rates[3],
-                         trainable=4 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv41")(x)
-    for i in range(8):
-        x = residual_block(x, 256, dilation_rates[3], 1, data_format, normalization, activation, "glorot_uniform", 4 not in frozen_stages, 42 + i * 2)
-    x = ConvNormActBlock(filters=256,
-                         kernel_size=1,
-                         strides=1,
-                         dilation_rate=dilation_rates[3],
-                         trainable=4 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv58")(x)
-    x = tf.keras.layers.Concatenate(axis=channels_axis)([x, route])
-    x = ConvNormActBlock(filters=512,
-                         kernel_size=1,
-                         strides=1,
-                         dilation_rate=dilation_rates[3],
-                         trainable=4 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv59")(x)
+    x = _make_csp_stage(x, 8, 512, strides[3], dilation_rates[3], 1, data_format, normalization, activation, kernel_initializer, 4 not in frozen_stages, 39)
     outputs.append(x)
-
-    x = ConvNormActBlock(filters=1024,
-                         kernel_size=3,
-                         strides=strides[4],
-                         dilation_rate=1,
-                         trainable=5 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv60")(x)
-    route = ConvNormActBlock(filters=512,
-                             kernel_size=1,
-                             strides=1,
-                             dilation_rate=dilation_rates[4],
-                             trainable=5 not in frozen_stages,
-                             kernel_initializer="glorot_uniform",
-                             normalization=normalization,
-                             activation=activation,
-                             data_format=data_format,
-                             name="conv61")(x)
-    x = ConvNormActBlock(filters=512,
-                         kernel_size=1,
-                         strides=1,
-                         dilation_rate=dilation_rates[4],
-                         trainable=5 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv62")(x)
-    for i in range(4):
-        x = residual_block(x, 512, dilation_rates[4], 1, data_format, normalization, activation, "glorot_uniform", 5 not in frozen_stages, 63 + i * 2)
-    x = ConvNormActBlock(filters=512,
-                         kernel_size=1,
-                         strides=1,
-                         dilation_rate=dilation_rates[3],
-                         trainable=4 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv71")(x)
-    x = tf.keras.layers.Concatenate(axis=channels_axis)([x, route])
-    x = ConvNormActBlock(filters=1024,
-                         kernel_size=1,
-                         strides=1,
-                         dilation_rate=dilation_rates[3],
-                         trainable=4 not in frozen_stages,
-                         kernel_initializer="glorot_uniform",
-                         normalization=normalization,
-                         activation=activation,
-                         data_format=data_format,
-                         name="conv72")(x)
+    x = _make_csp_stage(x, 4, 1024, strides[4], dilation_rates[4], 1, data_format, normalization, activation, kernel_initializer, 5 not in frozen_stages, 60)
     outputs.append(x)
 
     if -1 in output_indices:
@@ -522,12 +284,13 @@ def _load_darknet_weights(model, darknet_weights_path, num_convs):
 if __name__ == '__main__':
     from .common import fuse
 
-    model = csp_darknet53(input_shape=(256, 256, 3),
-                          normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
-                          activation=dict(activation="leaky_relu", alpha=0.1))
+    name = "cspdarknet53"
+    model = CSPDarknet53(input_shape=(256, 256, 3),
+                         normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+                         activation=dict(activation="leaky_relu", alpha=0.1))
     
-    model.summary()
-    _load_darknet_weights(model, "/Users/bailang/Downloads/pretrained_weights/csdarknet53.weights", 53)
+    # model.summary()
+    _load_darknet_weights(model, "/Users/bailang/Downloads/pretrained_weights/%s.weights" % name, 73)
     
     # fuse(model, block_fn)
 
@@ -541,6 +304,6 @@ if __name__ == '__main__':
     print("prob:", top5prob.numpy())
     print("class:", top5class.numpy())
     
-    model.save_weights("/Users/bailang/Downloads/pretrained_weights/darknet53.h5")
-    model.save_weights("/Users/bailang/Downloads/pretrained_weights/darknet53/model.ckpt")
+    model.save_weights("/Users/bailang/Downloads/pretrained_weights/%s.h5" % name)
+    model.save_weights("/Users/bailang/Downloads/pretrained_weights/%s/model.ckpt" % name)
 

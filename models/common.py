@@ -54,7 +54,7 @@ class ConvNormActBlock(tf.keras.Model):
                  dropblock=None,
                  name=None):
         super(ConvNormActBlock, self).__init__(name=name)
-
+   
         if isinstance(kernel_size, int):
             kernel_size = (kernel_size, kernel_size)
 

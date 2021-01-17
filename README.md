@@ -41,3 +41,18 @@ ClassificaitonX is an open source 2D image classfication toolbox based on Tensor
 |  Res2NeXt-50        |    24.67M    |    4.2    |    21.76    |    6.09     |      |
 |  Res2Net-DLA-60     |    21.15M    |    4.2    |    21.53    |    5.80     |      |
 |  Res2NeXt-DLA-60    |    17.33M    |    3.6    |    21.55    |    5.86     |      |
+
+#### CrossStageParrialNetwork
+```
+@inproceedings{wang2020cspnet,
+  title={CSPNet: A new backbone that can enhance learning capability of cnn},
+  author={Wang, Chien-Yao and Mark Liao, Hong-Yuan and Wu, Yueh-Hua and Chen, Ping-Yang and Hsieh, Jun-Wei and Yeh, I-Hau},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops},
+  pages={390--391},
+  year={2020}
+}
+```
+|       model         |   #Params    |   BFLOPs  | top-1 error | top-5 error | link |
+| :-----------------: | :----------: | :-------: | :---------: | :---------: | :---:|
+|  Darknet-53         |    41.57M    |   18.57   |    22.8    |      6.2     |      |
+|  CSPDarkNet-53      |    27.61M    |   13.07   |    22.8    |      6.4     |      |
