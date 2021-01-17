@@ -60,7 +60,7 @@ class Bottle2neck(tf.keras.Model):
         if stype == "stage":
             padding = "same"
             if strides != 1:
-                self.pad = tf.keras.layers.ZeroPadding2D(((1, 1), (1, 1)))
+                self.pad = tf.keras.layers.ZeroPadding2D(((1, 1), (1, 1)), data_format)
                 padding = "valid"
             self.avgpool = tf.keras.layers.AvgPool2D(3, strides, padding, data_format, name=name + "/avgpool")
            
@@ -74,7 +74,7 @@ class Bottle2neck(tf.keras.Model):
                                       name="conv3")
         self.act = build_activation(**activation, name=activation["activation"])
         if downsample:
-            self.downsample_pool = tf.keras.layers.AvgPool2D(strides, strides, "downsample/avgpool")
+            self.downsample_pool = tf.keras.layers.AvgPool2D(strides, strides, "same", data_format, name="downsample/avgpool")
             self.downsample = ConvNormActBlock(filters=filters * self.expansion,
                                                kernel_size=1,
                                                strides=1,
@@ -119,11 +119,10 @@ class Bottle2neck(tf.keras.Model):
         return x
 
 
-class Res2Net(Model):
+class Res2NetV1B(Model):
     def __init__(self, 
                  name, 
                  num_blocks,
-                 convolution='conv2d', 
                  dropblock=dict(block_size=7, drop_rate=0.1),
                  normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
                  activation=dict(activation="relu"),
@@ -138,20 +137,19 @@ class Res2Net(Model):
                  num_classes=1000, 
                  drop_rate=0.5,
                  **kwargs):
-        super(Res2Net, self).__init__(name, 
-                                      convolution=convolution, 
-                                      normalization=normalization, 
-                                      activation=activation, 
-                                      output_indices=output_indices, 
-                                      strides=strides, 
-                                      dilation_rates=dilation_rates, 
-                                      frozen_stages=frozen_stages, 
-                                      input_shape=input_shape, 
-                                      input_tensor=input_tensor, 
-                                      dropblock=dropblock, 
-                                      num_classes=num_classes, 
-                                      drop_rate=drop_rate,
-                                      **kwargs)
+        super(Res2NetV1B, self).__init__(name, 
+                                         normalization=normalization, 
+                                         activation=activation, 
+                                         output_indices=output_indices, 
+                                         strides=strides, 
+                                         dilation_rates=dilation_rates, 
+                                         frozen_stages=frozen_stages, 
+                                         input_shape=input_shape, 
+                                         input_tensor=input_tensor, 
+                                         dropblock=dropblock, 
+                                         num_classes=num_classes, 
+                                         drop_rate=drop_rate,
+                                         **kwargs)
         self.num_blocks = num_blocks
         self.base_width = base_width
         self.scale = scale
@@ -250,202 +248,190 @@ class Res2Net(Model):
         return x
 
     
-@MODELS.register("Res2Net50V1B_26W4S")
-def Res2Net50V1B_26W4S(convolution='conv2d', 
-                       dropblock=None, 
-                       normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
-                       activation=dict(activation='relu'), 
-                       output_indices=(3, 4), 
-                       strides=(2, 2, 2, 2, 2), 
-                       dilation_rates=(1, 1, 1, 1, 1), 
-                       frozen_stages=(-1, ), 
-                       input_shape=None, 
-                       input_tensor=None,
-                       num_classes=1000, 
-                       drop_rate=0.5,
-                       **kwargs):
-    return Res2Net("res2net50v1b_26w4s", 
-                   num_blocks=[3, 4, 6, 3],
-                   convolution=convolution, 
-                   dropblock=dropblock, 
-                   normalization=normalization, 
-                   activation=activation, 
-                   output_indices=output_indices, 
-                   strides=strides, 
-                   dilation_rates=dilation_rates, 
-                   frozen_stages=frozen_stages, 
-                   input_shape=input_shape, 
-                   input_tensor=input_tensor, 
-                   base_width=26, 
-                   scale=4, 
-                   num_classes=num_classes, 
-                   drop_rate=drop_rate,
-                   **kwargs).build_model()
+@MODELS.register("Res2NetV1B50V1B_26W4S")
+def Res2NetV1B50V1B_26W4S(dropblock=None, 
+                          normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
+                          activation=dict(activation='relu'), 
+                          output_indices=(3, 4), 
+                          strides=(2, 2, 2, 2, 2), 
+                          dilation_rates=(1, 1, 1, 1, 1), 
+                          frozen_stages=(-1, ), 
+                          input_shape=None, 
+                          input_tensor=None,
+                          num_classes=1000, 
+                          drop_rate=0.5,
+                          **kwargs):
+    return Res2NetV1B("res2net50v1b_26w4s", 
+                      num_blocks=[3, 4, 6, 3],
+                      dropblock=dropblock, 
+                      normalization=normalization, 
+                      activation=activation, 
+                      output_indices=output_indices, 
+                      strides=strides, 
+                      dilation_rates=dilation_rates, 
+                      frozen_stages=frozen_stages, 
+                      input_shape=input_shape, 
+                      input_tensor=input_tensor, 
+                      base_width=26, 
+                      scale=4, 
+                      num_classes=num_classes, 
+                      drop_rate=drop_rate,
+                      **kwargs).build_model()
 
 
-@MODELS.register("Res2Net101V1B_26W4S")
-def Res2Net101V1B_26W4S(convolution='conv2d', 
-                        dropblock=None, 
-                        normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
-                        activation=dict(activation='relu'), 
-                        output_indices=(3, 4), 
-                        strides=(2, 2, 2, 2, 2), 
-                        dilation_rates=(1, 1, 1, 1, 1), 
-                        frozen_stages=(-1, ), 
-                        input_shape=None, 
-                        input_tensor=None,
-                        num_classes=1000, 
-                        drop_rate=0.5,
-                        **kwargs):
-    return Res2Net("res2net101v1b_26w4s", 
-                   num_blocks=[3, 4, 23, 3],
-                   convolution=convolution, 
-                   dropblock=dropblock, 
-                   normalization=normalization, 
-                   activation=activation, 
-                   output_indices=output_indices, 
-                   strides=strides, 
-                   dilation_rates=dilation_rates, 
-                   frozen_stages=frozen_stages, 
-                   input_shape=input_shape, 
-                   input_tensor=input_tensor, 
-                   base_width=26, 
-                   scale=4, 
-                   num_classes=num_classes, 
-                   drop_rate=drop_rate,
-                   **kwargs).build_model()
+@MODELS.register("Res2NetV1B101V1B_26W4S")
+def Res2NetV1B101V1B_26W4S(dropblock=None, 
+                           normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
+                           activation=dict(activation='relu'), 
+                           output_indices=(3, 4), 
+                           strides=(2, 2, 2, 2, 2), 
+                           dilation_rates=(1, 1, 1, 1, 1), 
+                           frozen_stages=(-1, ), 
+                           input_shape=None, 
+                           input_tensor=None,
+                           num_classes=1000, 
+                           drop_rate=0.5,
+                           **kwargs):
+    return Res2NetV1B("res2net101v1b_26w4s", 
+                      num_blocks=[3, 4, 23, 3],
+                      dropblock=dropblock, 
+                      normalization=normalization, 
+                      activation=activation, 
+                      output_indices=output_indices, 
+                      strides=strides, 
+                      dilation_rates=dilation_rates, 
+                      frozen_stages=frozen_stages, 
+                      input_shape=input_shape, 
+                      input_tensor=input_tensor, 
+                      base_width=26, 
+                      scale=4, 
+                      num_classes=num_classes, 
+                      drop_rate=drop_rate,
+                      **kwargs).build_model()
 
 
-@MODELS.register("Res2Net50V1B_26W6S")
-def Res2Net50V1B_26W6S(convolution='conv2d', 
-                       dropblock=None, 
-                       normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
-                       activation=dict(activation='relu'), 
-                       output_indices=(-1, ), 
-                       strides=(2, 2, 2, 2, 2), 
-                       dilation_rates=(1, 1, 1, 1, 1), 
-                       frozen_stages=(-1, ), 
-                       input_shape=None, 
-                       input_tensor=None,
-                       num_classes=1000, 
-                       drop_rate=0.5,
-                       **kwargs):
-    return Res2Net("res2net50v1b_26w6s", 
-                   num_blocks=[3, 4, 6, 3],
-                   convolution=convolution, 
-                   dropblock=dropblock, 
-                   normalization=normalization, 
-                   activation=activation, 
-                   output_indices=output_indices, 
-                   strides=strides, 
-                   dilation_rates=dilation_rates, 
-                   frozen_stages=frozen_stages, 
-                   input_shape=input_shape, 
-                   input_tensor=input_tensor, 
-                   base_width=26, 
-                   scale=6, 
-                   num_classes=num_classes, 
-                   drop_rate=drop_rate,
-                   **kwargs).build_model()
+@MODELS.register("Res2NetV1B50V1B_26W6S")
+def Res2NetV1B50V1B_26W6S(dropblock=None, 
+                          normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
+                          activation=dict(activation='relu'), 
+                          output_indices=(-1, ), 
+                          strides=(2, 2, 2, 2, 2), 
+                          dilation_rates=(1, 1, 1, 1, 1), 
+                          frozen_stages=(-1, ), 
+                          input_shape=None, 
+                          input_tensor=None,
+                          num_classes=1000, 
+                          drop_rate=0.5,
+                          **kwargs):
+    return Res2NetV1B("res2net50v1b_26w6s", 
+                      num_blocks=[3, 4, 6, 3],
+                      dropblock=dropblock, 
+                      normalization=normalization, 
+                      activation=activation, 
+                      output_indices=output_indices, 
+                      strides=strides, 
+                      dilation_rates=dilation_rates, 
+                      frozen_stages=frozen_stages, 
+                      input_shape=input_shape, 
+                      input_tensor=input_tensor, 
+                      base_width=26, 
+                      scale=6, 
+                      num_classes=num_classes, 
+                      drop_rate=drop_rate,
+                      **kwargs).build_model()
 
 
-@MODELS.register("Res2Net50V1B_26W8S")
-def Res2Net50V1B_26W8S(convolution='conv2d', 
-                       dropblock=None, 
-                       normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis=-1, trainable =True), 
-                       activation=dict(activation='relu'), 
-                       output_indices=(3, 4), 
-                       strides=(2, 2, 2, 2, 2), 
-                       dilation_rates=(1, 1, 1, 1, 1), 
-                       frozen_stages=(-1, ), 
-                       input_shape=None, 
-                       input_tensor=None,
-                       num_classes=1000, 
-                       drop_rate=0.5,
-                       **kwargs):
-    return Res2Net("res2net50v1b_26w8s", 
-                   num_blocks=[3, 4, 6, 3],
-                   convolution=convolution, 
-                   dropblock=dropblock, 
-                   normalization=normalization, 
-                   activation=activation, 
-                   output_indices=output_indices, 
-                   strides=strides, 
-                   dilation_rates=dilation_rates, 
-                   frozen_stages=frozen_stages, 
-                   input_shape=input_shape, 
-                   input_tensor=input_tensor, 
-                   base_width=26, 
-                   scale=8, 
-                   num_classes=num_classes, 
-                   drop_rate=drop_rate,
-                   **kwargs).build_model()
+@MODELS.register("Res2NetV1B50V1B_26W8S")
+def Res2NetV1B50V1B_26W8S(dropblock=None, 
+                          normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis=-1, trainable =True), 
+                          activation=dict(activation='relu'), 
+                          output_indices=(3, 4), 
+                          strides=(2, 2, 2, 2, 2), 
+                          dilation_rates=(1, 1, 1, 1, 1), 
+                          frozen_stages=(-1, ), 
+                          input_shape=None, 
+                          input_tensor=None,
+                          num_classes=1000, 
+                          drop_rate=0.5,
+                          **kwargs):
+    return Res2NetV1B("res2net50v1b_26w8s", 
+                      num_blocks=[3, 4, 6, 3],
+                      dropblock=dropblock, 
+                      normalization=normalization, 
+                      activation=activation, 
+                      output_indices=output_indices, 
+                      strides=strides, 
+                      dilation_rates=dilation_rates, 
+                      frozen_stages=frozen_stages, 
+                      input_shape=input_shape, 
+                      input_tensor=input_tensor, 
+                      base_width=26, 
+                      scale=8, 
+                      num_classes=num_classes, 
+                      drop_rate=drop_rate,
+                      **kwargs).build_model()
 
 
-@MODELS.register("Res2Net50V1B_48W2S")
-def Res2Net50V1B_48W2S(convolution='conv2d', 
-                       dropblock=None, 
-                       normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
-                       activation=dict(activation='relu'), 
-                       output_indices=(3, 4), 
-                       strides=(2, 2, 2, 2, 2), 
-                       dilation_rates=(1, 1, 1, 1, 1), 
-                       frozen_stages=(-1, ), 
-                       input_shape=None, 
-                       input_tensor=None,
-                       num_classes=1000, 
-                       drop_rate=0.5,
-                       **kwargs):
-    return Res2Net("res2net50v1b_48w2s", 
-                   num_blocks=[3, 4, 6, 3],
-                   convolution=convolution, 
-                   dropblock=dropblock, 
-                   normalization=normalization, 
-                   activation=activation, 
-                   output_indices=output_indices, 
-                   strides=strides, 
-                   dilation_rates=dilation_rates, 
-                   frozen_stages=frozen_stages, 
-                   input_shape=input_shape, 
-                   input_tensor=input_tensor, 
-                   base_width=48, 
-                   scale=2, 
-                   num_classes=num_classes, 
-                   drop_rate=drop_rate,
-                   **kwargs).build_model()
+@MODELS.register("Res2NetV1B50V1B_48W2S")
+def Res2NetV1B50V1B_48W2S(dropblock=None, 
+                          normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
+                          activation=dict(activation='relu'), 
+                          output_indices=(3, 4), 
+                          strides=(2, 2, 2, 2, 2), 
+                          dilation_rates=(1, 1, 1, 1, 1), 
+                          frozen_stages=(-1, ), 
+                          input_shape=None, 
+                          input_tensor=None,
+                          num_classes=1000, 
+                          drop_rate=0.5,
+                          **kwargs):
+    return Res2NetV1B("res2net50v1b_48w2s", 
+                      num_blocks=[3, 4, 6, 3],
+                      dropblock=dropblock, 
+                      normalization=normalization, 
+                      activation=activation, 
+                      output_indices=output_indices, 
+                      strides=strides, 
+                      dilation_rates=dilation_rates, 
+                      frozen_stages=frozen_stages, 
+                      input_shape=input_shape, 
+                      input_tensor=input_tensor, 
+                      base_width=48, 
+                      scale=2, 
+                      num_classes=num_classes, 
+                      drop_rate=drop_rate,
+                      **kwargs).build_model()
 
 
-@MODELS.register("Res2Net50V1B_14W8S")
-def Res2Net50V1B_14W8S(convolution='conv2d', 
-                       dropblock=None, 
-                       normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
-                       activation=dict(activation='relu'), 
-                       output_indices=(3, 4), 
-                       strides=(2, 2, 2, 2, 2), 
-                       dilation_rates=(1, 1, 1, 1, 1), 
-                       frozen_stages=(-1, ), 
-                       input_shape=None, 
-                       input_tensor=None,
-                       num_classes=1000, 
-                       drop_rate=0.5,
-                       **kwargs):
-    return Res2Net("res2net50V1B_14w8s", 
-                   num_blocks=[3, 4, 6, 3],
-                   convolution=convolution, 
-                   dropblock=dropblock, 
-                   normalization=normalization, 
-                   activation=activation, 
-                   output_indices=output_indices, 
-                   strides=strides, 
-                   dilation_rates=dilation_rates, 
-                   frozen_stages=frozen_stages, 
-                   input_shape=input_shape, 
-                   input_tensor=input_tensor, 
-                   base_width=14, 
-                   scale=8, 
-                   num_classes=num_classes, 
-                   drop_rate=drop_rate,
-                   **kwargs).build_model()
+@MODELS.register("Res2NetV1B50V1B_14W8S")
+def Res2NetV1B50V1B_14W8S(dropblock=None, 
+                          normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
+                          activation=dict(activation='relu'), 
+                          output_indices=(3, 4), 
+                          strides=(2, 2, 2, 2, 2), 
+                          dilation_rates=(1, 1, 1, 1, 1), 
+                          frozen_stages=(-1, ), 
+                          input_shape=None, 
+                          input_tensor=None,
+                          num_classes=1000, 
+                          drop_rate=0.5,
+                          **kwargs):
+    return Res2NetV1B("res2net50V1B_14w8s", 
+                      num_blocks=[3, 4, 6, 3],
+                      dropblock=dropblock, 
+                      normalization=normalization, 
+                      activation=activation, 
+                      output_indices=output_indices, 
+                      strides=strides, 
+                      dilation_rates=dilation_rates, 
+                      frozen_stages=frozen_stages, 
+                      input_shape=input_shape, 
+                      input_tensor=input_tensor, 
+                      base_width=14, 
+                      scale=8, 
+                      num_classes=num_classes, 
+                      drop_rate=drop_rate,
+                      **kwargs).build_model()
 
 
 def _get_weight_name_map(blocks, scale):
@@ -479,11 +465,11 @@ def _get_weight_name_map(blocks, scale):
                         "%s/batch_norm/beta:0" % n1: "%s.bn%d.bias" % (n2, k),
                         "%s/batch_norm/moving_mean:0" % n1: "%s.bn%d.running_mean" % (n2, k),
                         "%s/batch_norm/moving_variance:0" % n1: "%s.bn%d.running_var" % (n2, k),
-                        "layer%d/0/downsample/conv2d/kernel:0" % i: "layer%d.0.downsample.0.weight" % i,
-                        "layer%d/0/downsample/batch_norm/gamma:0" % i: "layer%d.0.downsample.1.weight" % i,
-                        "layer%d/0/downsample/batch_norm/beta:0" % i: "layer%d.0.downsample.1.bias" % i,
-                        "layer%d/0/downsample/batch_norm/moving_mean:0" % i: "layer%d.0.downsample.1.running_mean" % i,
-                        "layer%d/0/downsample/batch_norm/moving_variance:0" % i: "layer%d.0.downsample.1.running_var" % i
+                        "layer%d/0/downsample/conv2d/kernel:0" % i: "layer%d.0.downsample.1.weight" % i,
+                        "layer%d/0/downsample/batch_norm/gamma:0" % i: "layer%d.0.downsample.2.weight" % i,
+                        "layer%d/0/downsample/batch_norm/beta:0" % i: "layer%d.0.downsample.2.bias" % i,
+                        "layer%d/0/downsample/batch_norm/moving_mean:0" % i: "layer%d.0.downsample.2.running_mean" % i,
+                        "layer%d/0/downsample/batch_norm/moving_variance:0" % i: "layer%d.0.downsample.2.running_var" % i
                     }
                     name_map.update(m)
                 else:
@@ -515,6 +501,8 @@ def _torch2h5(model, torch_weight_path, blocks, scale):
     #     print(k) 
 
     name_map = _get_weight_name_map(blocks, scale)
+    # for k, v in name_map.items():
+    #     print(k, v)
     for weight in model.weights:
         name = weight.name
         
@@ -530,20 +518,25 @@ def _torch2h5(model, torch_weight_path, blocks, scale):
 
 
 if __name__ == "__main__":
-    name = "res2net50_48w_2s"
-    blocks = [3, 4, 6, 3]
-    scale = 2
-    model = Res2Net50_48W2S(input_shape=(224, 224, 3), output_indices=(-1, ))
+    name = "res2net101_v1b_26w_4s"
+    blocks = [3, 4, 23, 3]
+    scale = 4
+    model = Res2NetV1B101V1B_26W4S(input_shape=(224, 224, 3), output_indices=(-1, ))
     # model(tf.random.uniform([1, 224, 224, 3], 0, 255))
-    model.summary()
+    # model.summary()
     _torch2h5(model, "/Users/bailang/Downloads/pretrained_weights/%s.pth" % name, blocks, scale)
 
     with tf.io.gfile.GFile("/Users/bailang/Documents/pandas.jpg", "rb") as gf:
         images = tf.image.decode_jpeg(gf.read())
 
     images = tf.image.resize(images, (224, 224))[None]
-    logits = model(images, training=False)
-    probs = tf.nn.softmax(logits)
-    print(tf.nn.top_k(tf.squeeze(probs), k=5))
+    lbl = model(images, training=False)
+    
+    top5prob, top5class = tf.nn.top_k(tf.squeeze(tf.nn.softmax(lbl, -1), axis=0), k=5)
+    print("prob:", top5prob.numpy())
+    print("class:", top5class.numpy())
+    
+    model.save_weights("/Users/bailang/Downloads/pretrained_weights/%s.h5" % name)
+    model.save_weights("/Users/bailang/Downloads/pretrained_weights/%s/model.ckpt" % name) 
 
 

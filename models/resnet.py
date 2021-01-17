@@ -354,8 +354,7 @@ def ResNet50(normalization=dict(normalization="batch_norm", momentum=0.9, epsilo
 
 
 @MODELS.register("ResNet101")
-def ResNet101(convolution="conv2d",
-              normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+def ResNet101(normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
               activation=dict(activation="relu"),
               output_indices=(-1, ),
               strides=(2, 2, 2, 2, 2),
@@ -370,7 +369,6 @@ def ResNet101(convolution="conv2d",
     return ResNet(name="resnet101",
                   blocks=[3, 4, 23, 3],
                   block_fn=Bottleneck,
-                  convolution=convolution,
                   normalization=normalization,
                   activation=activation,
                   output_indices=output_indices,
@@ -386,8 +384,7 @@ def ResNet101(convolution="conv2d",
 
 
 @MODELS.register("ResNet152")
-def ResNet152(convolution="conv2d",
-              normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+def ResNet152(normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
               activation=dict(activation="relu"),
               output_indices=(-1, ),
               strides=(2, 2, 2, 2, 2),
@@ -399,11 +396,9 @@ def ResNet152(convolution="conv2d",
               input_shape=(224, 224, 3),
               input_tensor=None,
               **kwargs):
-    
     return ResNet(name="resnet152",
                   blocks=[3, 8, 36, 3],
                   block_fn=Bottleneck,
-                  convolution=convolution,
                   normalization=normalization,
                   activation=activation,
                   output_indices=output_indices,

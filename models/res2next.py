@@ -32,7 +32,6 @@ class Bottle2neckX(tf.keras.Model):
 
         width = int(math.floor(filters * (base_width / 64.)))
         self.channel_axis = -1 if data_format == "channels_last" else 1
-
         self.conv1 = ConvNormActBlock(filters=width * cardinality * scale,
                                       kernel_size=1,
                                       trainable=trainable,
@@ -123,7 +122,6 @@ class Res2NeXt(Model):
     def __init__(self, 
                  name, 
                  num_blocks,
-                 convolution='conv2d', 
                  dropblock=dict(block_size=7, drop_rate=0.1),
                  normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
                  activation=dict(activation="relu"),
@@ -139,7 +137,6 @@ class Res2NeXt(Model):
                  num_classes=1000, 
                  drop_rate=0.5):
         super(Res2NeXt, self).__init__(name, 
-                                       convolution=convolution, 
                                        normalization=normalization, 
                                        activation=activation, 
                                        output_indices=output_indices, 
@@ -172,10 +169,7 @@ class Res2NeXt(Model):
                              kernel_initializer="he_normal",
                              normalization=self.normalization,
                              name="conv1")(x)
-        x = tf.keras.layers.ZeroPadding2D(padding=((1, 1), (1, 1)))(x)
-        x = tf.keras.layers.MaxPool2D((3, 3), self.strides[1], "valid", name="pool1")(x)
         self.infilters = 64 
-
         outputs = [x]
         x = tf.keras.layers.ZeroPadding2D(padding=((1, 1), (1, 1)))(x)
         x = tf.keras.layers.MaxPool2D((3, 3), self.strides[1], "valid", self.data_format, name="maxpool")(x)
@@ -200,6 +194,7 @@ class Res2NeXt(Model):
     
     def _make_layer(self, inputs, filters, num_block, strides=1, dilation_rate=1, trainable=True, name="layer"):
         x = Bottle2neckX(filters,
+                         cardinality=self.cardinality,
                          strides=strides,
                          base_width=self.base_width,
                          scale=self.scale,
@@ -215,6 +210,7 @@ class Res2NeXt(Model):
         
         for i in range(1, num_block):
             x = Bottle2neckX(filters,
+                             cardinality=self.cardinality,
                              strides=1,
                              base_width=self.base_width,
                              scale=self.scale,
@@ -232,11 +228,11 @@ class Res2NeXt(Model):
     
 
 @MODELS.register("Res2NeXt50")
-def Res2NeXt50(convolution='conv2d', 
-               dropblock=dict(block_size=7, drop_rate=0.1), 
+def Res2NeXt50(dropblock=dict(block_size=7, drop_rate=0.1), 
                normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
                activation=dict(activation='relu'), 
-               output_indices=(3, 4), strides=(2, 2, 2, 2, 2), 
+               output_indices=(-1, ), 
+               strides=(2, 2, 2, 2, 2), 
                dilation_rates=(1, 1, 1, 1, 1), 
                frozen_stages=(-1, ), 
                input_shape=None, 
@@ -246,7 +242,70 @@ def Res2NeXt50(convolution='conv2d',
                **kwargs):
     return Res2NeXt("res2next50", 
                     num_blocks=[3, 4, 6, 3],
-                    convolution=convolution, 
+                    dropblock=dropblock, 
+                    normalization=normalization, 
+                    activation=activation, 
+                    output_indices=output_indices, 
+                    strides=strides, 
+                    dilation_rates=dilation_rates, 
+                    frozen_stages=frozen_stages, 
+                    input_shape=input_shape, 
+                    input_tensor=input_tensor, 
+                    base_width=4, 
+                    cardinality=8,
+                    scale=4, 
+                    num_classes=num_classes, 
+                    drop_rate=drop_rate,
+                    **kwargs).build_model()
+
+
+@MODELS.register("Res2NeXt101")
+def Res2NeXt101(dropblock=dict(block_size=7, drop_rate=0.1), 
+                normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
+                activation=dict(activation='relu'), 
+                output_indices=(-1, ), 
+                strides=(2, 2, 2, 2, 2), 
+                dilation_rates=(1, 1, 1, 1, 1), 
+                frozen_stages=(-1, ), 
+                input_shape=None, 
+                input_tensor=None,
+                num_classes=1000, 
+                drop_rate=0.5,
+                **kwargs):
+    return Res2NeXt("res2next101", 
+                    num_blocks=[3, 4, 23, 3],
+                    dropblock=dropblock, 
+                    normalization=normalization, 
+                    activation=activation, 
+                    output_indices=output_indices, 
+                    strides=strides, 
+                    dilation_rates=dilation_rates, 
+                    frozen_stages=frozen_stages, 
+                    input_shape=input_shape, 
+                    input_tensor=input_tensor, 
+                    base_width=4, 
+                    cardinality=8,
+                    scale=4, 
+                    num_classes=num_classes, 
+                    drop_rate=drop_rate,
+                    **kwargs).build_model()
+
+
+@MODELS.register("Res2NeXt152")
+def Res2NeXt152(dropblock=dict(block_size=7, drop_rate=0.1), 
+                normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
+                activation=dict(activation='relu'), 
+                output_indices=(-1, ), 
+                strides=(2, 2, 2, 2, 2), 
+                dilation_rates=(1, 1, 1, 1, 1), 
+                frozen_stages=(-1, ), 
+                input_shape=None, 
+                input_tensor=None,
+                num_classes=1000, 
+                drop_rate=0.5,
+                **kwargs):
+    return Res2NeXt("res2next152", 
+                    num_blocks=[3, 8, 36, 3],
                     dropblock=dropblock, 
                     normalization=normalization, 
                     activation=activation, 
@@ -321,6 +380,7 @@ def _torch2h5(model, torch_weight_path, blocks, scale):
     #     print(k) 
 
     name_map = _get_weight_name_map(blocks, scale)
+    
     for weight in model.weights:
         name = weight.name
         
@@ -336,18 +396,23 @@ def _torch2h5(model, torch_weight_path, blocks, scale):
 
 
 if __name__ == "__main__":
-    name = "res2net50_48w_2s"
+    name = "res2next50_4s"
     blocks = [3, 4, 6, 3]
-    scale = 2
+    scale = 4
     model = Res2NeXt50(input_shape=(224, 224, 3), output_indices=(-1, ))
     # model(tf.random.uniform([1, 224, 224, 3], 0, 255))
-    model.summary()
+    # model.summary()
     _torch2h5(model, "/Users/bailang/Downloads/pretrained_weights/%s.pth" % name, blocks, scale)
 
     with tf.io.gfile.GFile("/Users/bailang/Documents/pandas.jpg", "rb") as gf:
         images = tf.image.decode_jpeg(gf.read())
 
     images = tf.image.resize(images, (224, 224))[None]
-    logits = model(images, training=False)
-    probs = tf.nn.softmax(logits)
-    print(tf.nn.top_k(tf.squeeze(probs), k=5))
+    lbl = model(images, training=False)
+    
+    top5prob, top5class = tf.nn.top_k(tf.squeeze(tf.nn.softmax(lbl, -1), axis=0), k=5)
+    print("prob:", top5prob.numpy())
+    print("class:", top5class.numpy())
+    
+    model.save_weights("/Users/bailang/Downloads/pretrained_weights/%s.h5" % name)
+    model.save_weights("/Users/bailang/Downloads/pretrained_weights/%s/model.ckpt" % name)

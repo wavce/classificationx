@@ -5,7 +5,6 @@ import tensorflow as tf
 class Model(object):
     def __init__(self,
                  name,
-                 convolution="conv2d",
                  normalization=dict(),
                  activation=dict(),
                  output_indices=(3, 4),
@@ -43,7 +42,6 @@ class Model(object):
         self.frozen_stages = frozen_stages
         self.dilation_rates = dilation_rates
         self.normalization = normalization 
-        self.convolution = convolution
         self.activation = activation
         self.dropblock = dropblock
         self.weight_decay = weight_decay 

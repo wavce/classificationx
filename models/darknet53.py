@@ -39,8 +39,7 @@ def residual_block(inputs,
 
 
 @MODELS.register("DarkNet53")
-def darknet53(convolution="conv2d",
-              normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+def darknet53(normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
               activation=dict(activation="leaky_relu", alpha=0.1),
               output_indices=(-1, ),
               strides=(2, 2, 2, 2, 2),
@@ -63,7 +62,7 @@ def darknet53(convolution="conv2d",
     
 
     def _norm(inp):
-        inp /= 255
+        inp /= 255.
         return inp
 
     x = tf.keras.layers.Lambda(_norm, name="norm_input")(inputs)
@@ -158,8 +157,7 @@ def darknet53(convolution="conv2d",
 
 
 @MODELS.register("CSPDarkNet53")
-def csp_darknet53(convolution="conv2d",
-                  normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+def csp_darknet53(normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
                   activation=dict(activation="leaky_relu", alpha=0.1),
                   output_indices=(-1, ),
                   strides=(2, 2, 2, 2, 2),
@@ -511,7 +509,6 @@ def _load_darknet_weights(model, darknet_weights_path, num_convs):
 
             ksize, _, infilters, filters = kernel.shape.as_list()
             dshape = (filters, infilters, ksize, ksize)
-
             bias.assign(np.fromfile(wf, np.float32, filters))
 
             dkernel = np.fromfile(wf, np.float32, np.product(dshape))
@@ -524,12 +521,13 @@ def _load_darknet_weights(model, darknet_weights_path, num_convs):
 
 if __name__ == '__main__':
     from .common import fuse
-    model = darknet53(input_shape=(256, 256, 3),
-                      normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
-                      activation=dict(activation="leaky_relu", alpha=0.1))
+
+    model = csp_darknet53(input_shape=(256, 256, 3),
+                          normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+                          activation=dict(activation="leaky_relu", alpha=0.1))
     
-    # model.summary()
-    _load_darknet_weights(model, "/Users/bailang/Downloads/pretrained_weights/darknet53.weights", 53)
+    model.summary()
+    _load_darknet_weights(model, "/Users/bailang/Downloads/pretrained_weights/csdarknet53.weights", 53)
     
     # fuse(model, block_fn)
 

@@ -121,7 +121,6 @@ class Res2Net(Model):
     def __init__(self, 
                  name, 
                  num_blocks,
-                 convolution='conv2d', 
                  dropblock=dict(block_size=7, drop_rate=0.1),
                  normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
                  activation=dict(activation="relu"),
@@ -137,7 +136,6 @@ class Res2Net(Model):
                  drop_rate=0.5,
                  **kwargs):
         super(Res2Net, self).__init__(name, 
-                                      convolution=convolution, 
                                       normalization=normalization, 
                                       activation=activation, 
                                       output_indices=output_indices, 
@@ -229,8 +227,7 @@ class Res2Net(Model):
 
     
 @MODELS.register("Res2Net50_26W4S")
-def Res2Net50_26W4S(convolution='conv2d', 
-                    dropblock=None, 
+def Res2Net50_26W4S(dropblock=None, 
                     normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
                     activation=dict(activation='relu'), 
                     output_indices=(3, 4), 
@@ -244,7 +241,6 @@ def Res2Net50_26W4S(convolution='conv2d',
                     **kwargs):
     return Res2Net("res2net50_26w4s", 
                    num_blocks=[3, 4, 6, 3],
-                   convolution=convolution, 
                    dropblock=dropblock, 
                    normalization=normalization, 
                    activation=activation, 
@@ -262,8 +258,7 @@ def Res2Net50_26W4S(convolution='conv2d',
 
 
 @MODELS.register("Res2Net101_26W4S")
-def Res2Net101_26W4S(convolution='conv2d', 
-                     dropblock=None, 
+def Res2Net101_26W4S(dropblock=None, 
                      normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
                      activation=dict(activation='relu'), 
                      output_indices=(3, 4), 
@@ -277,7 +272,6 @@ def Res2Net101_26W4S(convolution='conv2d',
                      **kwargs):
     return Res2Net("res2net101_26w4s", 
                    num_blocks=[3, 4, 23, 3],
-                   convolution=convolution, 
                    dropblock=dropblock, 
                    normalization=normalization, 
                    activation=activation, 
@@ -295,8 +289,7 @@ def Res2Net101_26W4S(convolution='conv2d',
 
 
 @MODELS.register("Res2Net50_26W6S")
-def Res2Net50_26W6S(convolution='conv2d', 
-                    dropblock=None, 
+def Res2Net50_26W6S(dropblock=None, 
                     normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
                     activation=dict(activation='relu'), 
                     output_indices=(-1, ), 
@@ -310,7 +303,6 @@ def Res2Net50_26W6S(convolution='conv2d',
                     **kwargs):
     return Res2Net("res2net50_26w6s", 
                    num_blocks=[3, 4, 6, 3],
-                   convolution=convolution, 
                    dropblock=dropblock, 
                    normalization=normalization, 
                    activation=activation, 
@@ -328,8 +320,7 @@ def Res2Net50_26W6S(convolution='conv2d',
 
 
 @MODELS.register("Res2Net50_26W8S")
-def Res2Net50_26W8S(convolution='conv2d', 
-                    dropblock=None, 
+def Res2Net50_26W8S(dropblock=None, 
                     normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis=-1, trainable =True), 
                     activation=dict(activation='relu'), 
                     output_indices=(3, 4), 
@@ -343,7 +334,6 @@ def Res2Net50_26W8S(convolution='conv2d',
                     **kwargs):
     return Res2Net("res2net50_26w8s", 
                    num_blocks=[3, 4, 6, 3],
-                   convolution=convolution, 
                    dropblock=dropblock, 
                    normalization=normalization, 
                    activation=activation, 
@@ -361,8 +351,7 @@ def Res2Net50_26W8S(convolution='conv2d',
 
 
 @MODELS.register("Res2Net50_48W2S")
-def Res2Net50_48W2S(convolution='conv2d', 
-                    dropblock=None, 
+def Res2Net50_48W2S(dropblock=None, 
                     normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
                     activation=dict(activation='relu'), 
                     output_indices=(3, 4), 
@@ -376,7 +365,6 @@ def Res2Net50_48W2S(convolution='conv2d',
                     **kwargs):
     return Res2Net("res2net50_48w2s", 
                    num_blocks=[3, 4, 6, 3],
-                   convolution=convolution, 
                    dropblock=dropblock, 
                    normalization=normalization, 
                    activation=activation, 
@@ -394,8 +382,7 @@ def Res2Net50_48W2S(convolution='conv2d',
 
 
 @MODELS.register("Res2Net50_14W8S")
-def Res2Net50_14W8S(convolution='conv2d', 
-                    dropblock=None, 
+def Res2Net50_14W8S(dropblock=None, 
                     normalization=dict(normalization='batch_norm', momentum=0.9, epsilon=1e-05, axis = -1, trainable =True), 
                     activation=dict(activation='relu'), 
                     output_indices=(3, 4), 
@@ -409,7 +396,6 @@ def Res2Net50_14W8S(convolution='conv2d',
                     **kwargs):
     return Res2Net("res2net50_14w8s", 
                    num_blocks=[3, 4, 6, 3],
-                   convolution=convolution, 
                    dropblock=dropblock, 
                    normalization=normalization, 
                    activation=activation, 
@@ -498,20 +484,25 @@ def _torch2h5(model, torch_weight_path, blocks, scale):
 
 
 if __name__ == "__main__":
-    name = "res2net50_48w_2s"
-    blocks = [3, 4, 6, 3]
-    scale = 2
-    model = Res2Net50_48W2S(input_shape=(224, 224, 3), output_indices=(-1, ))
+    name = "res2net101_26w_4s"
+    blocks = [3, 4, 23, 3]
+    scale = 4
+    model = Res2Net101_26W4S(input_shape=(224, 224, 3), output_indices=(-1, ))
     # model(tf.random.uniform([1, 224, 224, 3], 0, 255))
-    model.summary()
+    # model.summary()
     _torch2h5(model, "/Users/bailang/Downloads/pretrained_weights/%s.pth" % name, blocks, scale)
 
     with tf.io.gfile.GFile("/Users/bailang/Documents/pandas.jpg", "rb") as gf:
         images = tf.image.decode_jpeg(gf.read())
 
     images = tf.image.resize(images, (224, 224))[None]
-    logits = model(images, training=False)
-    probs = tf.nn.softmax(logits)
-    print(tf.nn.top_k(tf.squeeze(probs), k=5))
+    lbl = model(images, training=False)
+    
+    top5prob, top5class = tf.nn.top_k(tf.squeeze(tf.nn.softmax(lbl, -1), axis=0), k=5)
+    print("prob:", top5prob.numpy())
+    print("class:", top5class.numpy())
+    
+    model.save_weights("/Users/bailang/Downloads/pretrained_weights/%s.h5" % name)
+    model.save_weights("/Users/bailang/Downloads/pretrained_weights/%s/model.ckpt" % name)
 
 
