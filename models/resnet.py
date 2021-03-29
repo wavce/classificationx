@@ -6,7 +6,18 @@ from .common import ConvNormActBlock
 from core.layers import build_activation
 
 
-class BasicBlock(tf.keras.Model):
+def basic_block(inputs,
+                filters,
+                strides=1,
+                dilation_rate=1,
+                data_format="channels_last",
+                normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-3, axis=-1, trainable=True),
+                activation=dict(activation="relu"),
+                trainable=True,
+                dropblock=None,
+                use_conv_shortcut=False,
+                expansion=1,
+                name=None):
     """
     Basic Residual block
     
@@ -25,145 +36,112 @@ class BasicBlock(tf.keras.Model):
             otherwise identity shortcut.
         name: string, block label, default None.
     """
-    expansion = 1
-
-    def __init__(self,
-                 filters,
-                 strides=1,
-                 dilation_rate=1,
-                 data_format="channels_last",
-                 normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-3, axis=-1, trainable=True),
-                 activation=dict(activation="relu"),
-                 trainable=True,
-                 dropblock=None,
-                 use_conv_shortcut=False,
-                 name=None):
-        super(BasicBlock, self).__init__(name=name)
-        self.conv1 = ConvNormActBlock(filters=filters,
-                                      kernel_size=3,
-                                      strides=strides,
-                                      data_format=data_format,
-                                      dilation_rate=1 if strides > 1 else dilation_rate,
-                                      trainable=trainable,
-                                      normalization=normalization,
-                                      activation=activation,
-                                      dropblock=dropblock,
-                                      name="conv1")
-        self.conv2 = ConvNormActBlock(filters=filters,
-                                      kernel_size=3,
-                                      strides=1,
-                                      data_format=data_format,
-                                      dilation_rate=dilation_rate,
-                                      trainable=trainable,
-                                      normalization=normalization,
-                                      activation=None,
-                                      dropblock=dropblock,
-                                      name="conv2")
-        self.act = build_activation(**activation, name=activation["activation"])
-        if use_conv_shortcut:
-            self.shortcut = ConvNormActBlock(filters=filters,
-                                             kernel_size=1,
-                                             strides=strides,
-                                             data_format=data_format,
-                                             trainable=trainable,
-                                             normalization=normalization,
-                                             activation=None,
-                                             dropblock=dropblock,
-                                             name="shortcut")
+    x = ConvNormActBlock(filters=filters,
+                         kernel_size=3,
+                         strides=strides,
+                         data_format=data_format,
+                         dilation_rate=1 if strides > 1 else dilation_rate,
+                         trainable=trainable,
+                         normalization=normalization,
+                         activation=activation,
+                         dropblock=dropblock,
+                         name=name + "/conv1")(inputs)
+    x = ConvNormActBlock(filters=filters,
+                         kernel_size=3,
+                         strides=1,
+                         data_format=data_format,
+                         dilation_rate=dilation_rate,
+                         trainable=trainable,
+                         normalization=normalization,
+                         activation=None,
+                         dropblock=dropblock,
+                         name=name + "/conv2")(x)
     
-    def call(self, inputs, training=None):
-        shortcut = inputs
-        if hasattr(self, "shortcut"):
-            shortcut = self.shortcut(shortcut, training=training)
-        
-        x = self.conv1(inputs, training=training)
-        x = self.conv2(x, training=training)
-        x += shortcut
-        x = self.act(x)
+    shortcut = inputs
+    if use_conv_shortcut:
+        shortcut = ConvNormActBlock(filters=filters,
+                                    kernel_size=1,
+                                    strides=strides,
+                                    data_format=data_format,
+                                    trainable=trainable,
+                                    normalization=normalization,
+                                    activation=None,
+                                    dropblock=dropblock,
+                                    name=name + "/shortcut")(shortcut)
+    x = tf.keras.layers.Add(name=name + "/add")([x, shortcut])
+    x = build_activation(**activation, name=name + "/" + activation["activation"])(x)
+   
+    return x
 
-        return x
 
-
-class Bottleneck(tf.keras.Model):
-    expansion = 4
-
-    def __init__(self,
-                 filters,
-                 strides=1,
-                 dilation_rate=1,
-                 data_format="channels_last",
-                 normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-3, axis=-1, trainable=True),
-                 activation=dict(activation="relu"),
-                 trainable=True,
-                 dropblock=None,
-                 use_conv_shortcut=True,
-                 name=None):
-        """A residual block.
-
-            Args:
-                filters: integer, filters of the bottleneck layer.
-                convolution: The convolution type.
-                strides: default 1, stride of the first layer.
-                dilation_rate: default 1, dilation rate in 3x3 convolution.
-                data_format: default channels_last,
-                activation: the activation layer name.
-                trainable: does this block is trainable.
-                normalization: the normalization, e.g. "batch_norm", "group_norm" etc.
-                dropblock: the arguments in DropBlock2D
-                use_conv_shortcut: default True, use convolution shortcut if True,
-                    otherwise identity shortcut.
-                name: string, block label.
-        """
-        super(Bottleneck, self).__init__(name=name)
-        if use_conv_shortcut is True:
-            self.shortcut = ConvNormActBlock(filters=self.expansion * filters,
-                                             kernel_size=1,
-                                             strides=strides,
-                                             data_format=data_format,
-                                             trainable=trainable,
-                                             dropblock=dropblock,
-                                             normalization=normalization,
-                                             activation=None,
-                                             name="shortcut")
-        self.conv1 = ConvNormActBlock(filters=filters,
-                                      kernel_size=1,
-                                      strides=1,
-                                      trainable=trainable,
-                                      dropblock=dropblock,
-                                      data_format=data_format,
-                                      normalization=normalization,
-                                      activation=activation,
-                                      name="conv1")
-        self.conv2 = ConvNormActBlock(filters=filters,
-                                kernel_size=3,
-                                strides=strides,
-                                dilation_rate=dilation_rate if strides == 1 else 1,
-                                trainable=trainable,
-                                data_format=data_format,
-                                normalization=normalization,
-                                activation=activation,
-                                name="conv2")
-        self.act = build_activation(**activation, name=activation["activation"])
-        self.conv3 = ConvNormActBlock(filters=self.expansion * filters,
-                                      kernel_size=1,
-                                      trainable=trainable,
-                                      data_format=data_format,
-                                      normalization=normalization,
-                                      activation=None,
-                                      name="conv3")
-
-    def call(self, inputs, training=None):
-        if hasattr(self, "shortcut"):
-            shortcut = self.shortcut(inputs, training=training)
-        else:
-            shortcut = inputs
-        
-        x = self.conv1(inputs, training=training)
-        x = self.conv2(x, training=training)
-        x = self.conv3(x, training=training)
-        x += shortcut
-        x = self.act(x)
-        return x
+def bottleneck(inputs,
+               filters,
+               strides=1,
+               dilation_rate=1,
+               data_format="channels_last",
+               normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-3, axis=-1, trainable=True),
+               activation=dict(activation="relu"),
+               trainable=True,
+               dropblock=None,
+               use_conv_shortcut=True,
+               expansion=4,
+               name=None):
+    """A residual block.
+        Args:
+            filters: integer, filters of the bottleneck layer.
+            convolution: The convolution type.
+            strides: default 1, stride of the first layer.
+            dilation_rate: default 1, dilation rate in 3x3 convolution.
+            data_format: default channels_last,
+            activation: the activation layer name.
+            trainable: does this block is trainable.
+            normalization: the normalization, e.g. "batch_norm", "group_norm" etc.
+            dropblock: the arguments in DropBlock2D
+            use_conv_shortcut: default True, use convolution shortcut if True,
+                otherwise identity shortcut.
+            name: string, block label.
+    """
+    x = ConvNormActBlock(filters=filters,
+                         kernel_size=1,
+                         strides=1,
+                         trainable=trainable,
+                         dropblock=dropblock,
+                         data_format=data_format,
+                         normalization=normalization,
+                         activation=activation,
+                         name=name + "/conv1")(inputs)
+    x = ConvNormActBlock(filters=filters,
+                         kernel_size=3,
+                         strides=strides,
+                         dilation_rate=dilation_rate if strides == 1 else 1,
+                         trainable=trainable,
+                         data_format=data_format,
+                         normalization=normalization,
+                         activation=activation,
+                         name=name + "/conv2")(x)
+    x = ConvNormActBlock(filters=expansion * filters,
+                         kernel_size=1,
+                         trainable=trainable,
+                         data_format=data_format,
+                         normalization=normalization,
+                         activation=None,
+                         name=name + "/conv3")(x)
+    
+    shortcut = inputs
+    if use_conv_shortcut is True:
+        shortcut = ConvNormActBlock(filters=expansion * filters,
+                                    kernel_size=1,
+                                    strides=strides,
+                                    data_format=data_format,
+                                    trainable=trainable,
+                                    dropblock=dropblock,
+                                    normalization=normalization,
+                                    activation=None,
+                                    name=name + "/shortcut")(shortcut)
+    x = tf.keras.layers.Add(name=name + "/add")([x, shortcut])
+    x = build_activation(**activation, name=name + "/" + activation["activation"])(x)
+    
+    return x
 
 
 class ResNet(Model):
@@ -182,6 +160,7 @@ class ResNet(Model):
                  drop_rate=0.5,
                  input_shape=(224, 224, 3),
                  input_tensor=None,
+                 expansion=2,
                  **kwargs):
         super(ResNet, self).__init__(name=name,
                                      normalization=normalization,
@@ -198,6 +177,7 @@ class ResNet(Model):
                                      **kwargs)
         self.blocks = blocks
         self.block_fn = block_fn
+        self.expansion = expansion
 
     def build_model(self):
         def _norm(inp):
@@ -213,7 +193,7 @@ class ResNet(Model):
                              trainable=1 not in self.frozen_stages,
                              kernel_initializer="he_normal",
                              normalization=self.normalization,
-                             name="conv1")(x)
+                             name="stem/conv1")(x)
         x = tf.keras.layers.ZeroPadding2D(padding=((1, 1), (1, 1)))(x)
         x1 = tf.keras.layers.MaxPool2D((3, 3), self.strides[1], "valid", name="pool1")(x)
         self.in_filters = 64 
@@ -240,9 +220,10 @@ class ResNet(Model):
 
     def stack(self, x, filters, strides, dilation_rate, trainable, blocks, name=None):
         use_conv_shortcut = False
-        if strides != 1 or self.in_filters != filters * self.block_fn.expansion:
+        if strides != 1 or self.in_filters != filters * self.expansion:
             use_conv_shortcut = True
-        x = self.block_fn(filters=filters,
+        x = self.block_fn(inputs=x,
+                          filters=filters,
                           strides=strides,
                           dilation_rate=dilation_rate,
                           normalization=self.normalization,
@@ -250,9 +231,10 @@ class ResNet(Model):
                           trainable=trainable,
                           dropblock=self.dropblock,
                           use_conv_shortcut=use_conv_shortcut,
-                          name=name + "/0")(x)
+                          name=name + "/0")
         for i in range(1, blocks):
-            x = self.block_fn(filters=filters,
+            x = self.block_fn(inputs=x,
+                              filters=filters,
                               strides=1,
                               dilation_rate=dilation_rate,
                               normalization=self.normalization,
@@ -260,7 +242,7 @@ class ResNet(Model):
                               trainable=trainable,
                               dropblock=self.dropblock,
                               use_conv_shortcut=False,
-                              name=name + "/%d" % i)(x)
+                              name=name + "/%d" % i)
         return x
 
 
@@ -279,7 +261,7 @@ def ResNet18(normalization=dict(normalization="batch_norm", momentum=0.9, epsilo
              **kwargs):
     return ResNet(name="resnet18",
                   blocks=[2, 2, 2, 2],
-                  block_fn=BasicBlock,
+                  block_fn=basic_block,
                   normalization=normalization,
                   activation=activation,
                   strides=strides,
@@ -288,6 +270,7 @@ def ResNet18(normalization=dict(normalization="batch_norm", momentum=0.9, epsilo
                   dropblock=dropblock,
                   num_classes=num_classes,
                   drop_rate=drop_rate,
+                  expansion=1,
                   input_shape=input_shape,
                   input_tensor=input_tensor,
                   **kwargs).build_model()   
@@ -308,10 +291,11 @@ def ResNet34(normalization=dict(normalization="batch_norm", momentum=0.9, epsilo
              **kwargs):
     return ResNet(name="resnet34",
                   blocks=[3, 4, 6, 3],
-                  block_fn=BasicBlock,
+                  block_fn=basic_block,
                   normalization=normalization,
                   activation=activation,
                   strides=strides,
+                  expansion=1,
                   dilation_rates=dilation_rates,
                   frozen_stages=frozen_stages,
                   dropblock=dropblock,
@@ -338,7 +322,7 @@ def ResNet50(normalization=dict(normalization="batch_norm", momentum=0.9, epsilo
 
     return ResNet(name="resnet50",
                   blocks=[3, 4, 6, 3],
-                  block_fn=Bottleneck,
+                  block_fn=bottleneck,
                   normalization=normalization,
                   activation=activation,
                   output_indices=output_indices,
@@ -348,6 +332,7 @@ def ResNet50(normalization=dict(normalization="batch_norm", momentum=0.9, epsilo
                   dropblock=dropblock,
                   num_classes=num_classes,
                   input_shape=input_shape,
+                  expansion=4,
                   input_tensor=input_tensor,
                   drop_rate=drop_rate,
                   **kwargs).build_model()
@@ -368,7 +353,7 @@ def ResNet101(normalization=dict(normalization="batch_norm", momentum=0.9, epsil
               **kwargs):
     return ResNet(name="resnet101",
                   blocks=[3, 4, 23, 3],
-                  block_fn=Bottleneck,
+                  block_fn=bottleneck,
                   normalization=normalization,
                   activation=activation,
                   output_indices=output_indices,
@@ -379,6 +364,7 @@ def ResNet101(normalization=dict(normalization="batch_norm", momentum=0.9, epsil
                   num_classes=num_classes,
                   input_shape=input_shape,
                   input_tensor=input_tensor,
+                  expansion=4,
                   drop_rate=drop_rate,
                   **kwargs).build_model()
 
@@ -398,7 +384,7 @@ def ResNet152(normalization=dict(normalization="batch_norm", momentum=0.9, epsil
               **kwargs):
     return ResNet(name="resnet152",
                   blocks=[3, 8, 36, 3],
-                  block_fn=Bottleneck,
+                  block_fn=bottleneck,
                   normalization=normalization,
                   activation=activation,
                   output_indices=output_indices,
@@ -410,16 +396,17 @@ def ResNet152(normalization=dict(normalization="batch_norm", momentum=0.9, epsil
                   input_shape=input_shape,
                   input_tensor=input_tensor,
                   drop_rate=drop_rate,
+                  expansion=4,
                   **kwargs).build_model()
 
 
 def _get_weight_name_map(blocks):
     name_map = {
-        "conv1/conv2d/kernel:0": "conv1.weight",
-        "conv1/batch_norm/gamma:0": "bn1.weight",
-        "conv1/batch_norm/beta:0": "bn1.bias",
-        "conv1/batch_norm/moving_mean:0": "bn1.running_mean",
-        "conv1/batch_norm/moving_variance:0": "bn1.running_var",
+        "stem/conv1/conv2d/kernel:0": "conv1.weight",
+        "stem/conv1/batch_norm/gamma:0": "bn1.weight",
+        "stem/conv1/batch_norm/beta:0": "bn1.bias",
+        "stem/conv1/batch_norm/moving_mean:0": "bn1.running_mean",
+        "stem/conv1/batch_norm/moving_variance:0": "bn1.running_var",
     }
 
     for i in range(1, 5):
@@ -467,10 +454,10 @@ def _get_weights_from_pretrained(model, pretrained_weights_path, blocks):
 
 
 if __name__ == '__main__':
-    from .common import fuse
-    name = "resnet152"
-    block_fn = Bottleneck
-    blocks = [3, 8, 36, 3]
+    # from ..common import fuse
+    name = "resnet50"
+    block_fn = bottleneck
+    blocks = [3, 4, 6, 3]
     resnet = ResNet(name=name,
                     blocks=blocks,
                     block_fn=block_fn,
@@ -479,11 +466,11 @@ if __name__ == '__main__':
     model = resnet.build_model()
     model(tf.random.uniform([1, 224, 224, 3]))
     # model.summary()
-    _get_weights_from_pretrained(model, "/Users/bailang/Downloads/pretrained_weights/%s.pth" % name, blocks)
+    _get_weights_from_pretrained(model, "/home/bail/Downloads/%s.pth" % name, blocks)
     
     # fuse(model, block_fn)
 
-    with tf.io.gfile.GFile("/Users/bailang/Documents/pandas.jpg", "rb") as gf:
+    with tf.io.gfile.GFile("/home/bail/Documents/pandas.jpg", "rb") as gf:
         images = tf.image.decode_jpeg(gf.read())
 
     images = tf.image.resize(images, (224, 224))
@@ -493,7 +480,5 @@ if __name__ == '__main__':
     print("prob:", top5prob.numpy())
     print("class:", top5class.numpy())
     
-    model.save_weights("/Users/bailang/Downloads/pretrained_weights/%s.h5" % name)
-    model.save_weights("/Users/bailang/Downloads/pretrained_weights/%s/model.ckpt" % name)
-
-
+    # model.save_weights("/Users/bailang/Downloads/pretrained_weights/%s.h5" % name)
+    # model.save_weights("/Users/bailang/Downloads/pretrained_weights/%s/model.ckpt" % name)

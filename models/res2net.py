@@ -6,115 +6,90 @@ from .common import ConvNormActBlock
 from core.layers import build_activation
 
 
-class Bottle2neck(tf.keras.Model):
-    expansion = 4
+def bottle2neck(inputs,
+                filters,
+                strides=1,
+                scale=4,
+                base_width=26,
+                dilation_rate=1,
+                data_format="channels_last",
+                normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+                activation=dict(activation="relu"),
+                downsample=False,
+                trainable=True,
+                dropblock=None,
+                stype="normal",
+                expansion=4,
+                name="Bottle2neck"):
+    width = int(math.floor(filters * (base_width / 64.)))
+    channel_axis = -1 if data_format == "channels_last" else 1
 
-    def __init__(self,
-                 filters,
-                 strides=1,
-                 scale=4,
-                 base_width=26,
-                 dilation_rate=1,
-                 data_format="channels_last",
-                 normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
-                 activation=dict(activation="relu"),
-                 downsample=False,
-                 trainable=True,
-                 dropblock=None,
-                 stype="normal",
-                 name="Bottle2neck"):
+    x = ConvNormActBlock(filters=width * scale,
+                         kernel_size=1,
+                         trainable=trainable,
+                         data_format=data_format,
+                         normalization=normalization,
+                         activation=activation,
+                         dropblock=dropblock,
+                         name=name + "/conv1")(inputs)
     
-        super(Bottle2neck, self).__init__(name=name)
-        self.stype = stype
-        self.scale = scale
-
-        self.strides = strides
-
-        width = int(math.floor(filters * (base_width / 64.)))
-        self.channel_axis = -1 if data_format == "channels_last" else 1
-
-        self.conv1 = ConvNormActBlock(filters=width * scale,
-                                      kernel_size=1,
-                                      trainable=trainable,
-                                      data_format=data_format,
-                                      normalization=normalization,
-                                      activation=activation,
-                                      dropblock=dropblock,
-                                      name="conv1")
-       
-        num_convs = scale if scale == 1 else scale - 1
-        self.num_convs = num_convs
-        self.convs = []
-        for i in range(num_convs):
-            conv = ConvNormActBlock(filters=width, 
-                                    kernel_size=3, 
-                                    strides=strides, 
-                                    data_format=data_format, 
-                                    dilation_rate=dilation_rate if strides == 1 else 1, 
-                                    trainable=trainable,
-                                    normalization=normalization,
-                                    activation=activation,
-                                    dropblock=dropblock,
-                                    name="convs/%d" % i)
-            self.convs.append(conv)
-        if stype == "stage":
-            padding = "same"
-            if strides != 1:
-                self.pad = tf.keras.layers.ZeroPadding2D(((1, 1), (1, 1)))
-                padding = "valid"
-            self.avgpool = tf.keras.layers.AvgPool2D(3, strides, padding, data_format, name=name + "/avgpool")
-           
-        self.conv3 = ConvNormActBlock(filters=filters * self.expansion,
-                                      kernel_size=1,
-                                      trainable=trainable,
-                                      data_format=data_format,
-                                      normalization=normalization,
-                                      activation=None,
-                                      dropblock=dropblock,
-                                      name="conv3")
-        self.act = build_activation(**activation, name=activation["activation"])
-        if downsample:
-            self.downsample = ConvNormActBlock(filters=filters * self.expansion,
-                                               kernel_size=1,
-                                               strides=strides,
-                                               trainable=trainable,
-                                               data_format=data_format,
-                                               normalization=normalization,
-                                               activation=None,
-                                               dropblock=dropblock,
-                                               name="downsample")
-
-    def call(self, inputs, training=None):
-        shortcut = inputs
-
-        x = self.conv1(inputs, training=training)
-        spx = tf.split(x, self.scale, self.channel_axis)
-        for i in range(self.num_convs):
-            if i == 0 or self.stype == "stage":
-                sp = spx[i]
-            else:
-                sp += spx[i]
-            sp = self.convs[i](sp, training=training)
-            if i == 0:
-                x = sp
-            else:
-                x = tf.concat([x, sp], axis=self.channel_axis)
-        if self.scale != 1 and self.stype == "normal":
-            x = tf.concat([x, spx[self.num_convs]], self.channel_axis)
-        elif self.scale != 1 and self.stype == "stage":
-            if hasattr(self, "pad"):
-                x = tf.concat([x, self.avgpool(self.pad(spx[self.num_convs]))], self.channel_axis)
-            else:
-                x = tf.concat([x, self.avgpool(spx[self.num_convs])], self.channel_axis)
-        x = self.conv3(x, training=training)
-
-        if hasattr(self, "downsample"):
-            shortcut = self.downsample(shortcut, training)
+    num_convs = scale if scale == 1 else scale - 1
+    spx = tf.keras.layers.Lambda(lambda inp: tf.split(inp, scale, channel_axis), name=name + "/split")(x)
+    for i in range(num_convs):
+        if i == 0 or stype == "stage":
+            sp = spx[i]
+        else:
+            sp = tf.keras.layers.Add(name=name + "/add%d" % i)([sp, spx[i]])
+        sp = ConvNormActBlock(filters=width, 
+                              kernel_size=3, 
+                              strides=strides, 
+                              data_format=data_format, 
+                              dilation_rate=dilation_rate if strides == 1 else 1, 
+                              trainable=trainable,
+                              normalization=normalization,
+                              activation=activation,
+                              dropblock=dropblock,
+                              name=name + "/convs/%d" % i)(sp)
+        if i == 0:
+            x = sp
+        else:
+            x = tf.keras.layers.Concatenate(channel_axis, name=name + "/cat%d" % i)([x, sp])
+    if scale != 1 and stype == "normal":
+        x = tf.keras.layers.Concatenate(channel_axis, name=name + "/cat%d" % num_convs)([x, spx[num_convs]])
+    elif scale != 1 and stype == "stage":
+        padding = "same"
+        sp_ = spx[num_convs]
+        if strides != 1:
+            sp_ = tf.keras.layers.ZeroPadding2D(((1, 1), (1, 1)), name=name + "/pad")(sp_)
+            padding = "valid"
+            
+        sp_ = tf.keras.layers.AvgPool2D(3, strides, padding, data_format, name=name + "/avgpool")(sp_)
+        x = tf.keras.layers.Concatenate(channel_axis, name=name + "/cat%d" % num_convs)([x, sp_])
         
-        x += shortcut
-        x = self.act(x)
+    x = ConvNormActBlock(filters=filters * expansion,
+                         kernel_size=1,
+                         trainable=trainable,
+                         data_format=data_format,
+                         normalization=normalization,
+                         activation=None,
+                         dropblock=dropblock,
+                         name=name + "/conv3")(x)
 
-        return x
+    shortcut = inputs
+    if downsample:
+        shortcut = ConvNormActBlock(filters=filters * expansion,
+                                    kernel_size=1,
+                                    strides=strides,
+                                    trainable=trainable,
+                                    data_format=data_format,
+                                    normalization=normalization,
+                                    activation=None,
+                                    dropblock=dropblock,
+                                    name=name + "/downsample")(shortcut)
+    x = tf.keras.layers.Add(name=name + "/add")([x, shortcut])
+    x = build_activation(**activation, name=name + "/" + activation["activation"])(x)
+    
+    return x
 
 
 class Res2Net(Model):
@@ -194,7 +169,8 @@ class Res2Net(Model):
         return tf.keras.Model(inputs=self.img_input, outputs=outputs, name=self.name)
     
     def _make_layer(self, inputs, filters, num_block, strides=1, dilation_rate=1, trainable=True, name="layer"):
-        x = Bottle2neck(filters,
+        x = bottle2neck(inputs,
+                        filters,
                         strides=strides,
                         base_width=self.base_width,
                         scale=self.scale,
@@ -204,12 +180,13 @@ class Res2Net(Model):
                         dropblock=self.dropblock,
                         normalization=self.normalization,
                         activation=self.activation,
-                        downsample=strides != 1 or self.infilters != filters * Bottle2neck.expansion,
+                        downsample=strides != 1 or self.infilters != filters * 4,
                         stype="stage",
-                        name=name + "/0")(inputs)
+                        name=name + "/0")
         
         for i in range(1, num_block):
-            x = Bottle2neck(filters,
+            x = bottle2neck(x,
+                            filters,
                             strides=1,
                             base_width=self.base_width,
                             scale=self.scale,
@@ -220,8 +197,8 @@ class Res2Net(Model):
                             normalization=self.normalization,
                             activation=self.activation,
                             downsample=False,
-                            name=name + "/%d" % i)(x)
-        self.infilters = filters * Bottle2neck.expansion
+                            name=name + "/%d" % i)
+        self.infilters = filters * 4
 
         return x
 

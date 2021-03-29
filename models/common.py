@@ -4,7 +4,7 @@ from core.layers import build_activation
 from core.layers import DropBlock2D
 
 
-class ConvNormActBlock(tf.keras.Model):
+class ConvNormActBlock(tf.keras.layers.Layer):
     """Conv2D-Norm-Activation block
     
     Args:
@@ -43,7 +43,6 @@ class ConvNormActBlock(tf.keras.Model):
                  kernel_size, 
                  strides=1, 
                  groups=1,
-                 padding="same", 
                  data_format="channels_last", 
                  dilation_rate=1, 
                  kernel_initializer="he_normal",
@@ -53,7 +52,7 @@ class ConvNormActBlock(tf.keras.Model):
                  activation=None,
                  dropblock=None,
                  name=None):
-        super(ConvNormActBlock, self).__init__(name=name)
+        super(ConvNormActBlock, self).__init__(trainable=trainable, name=name)
    
         if isinstance(kernel_size, int):
             kernel_size = (kernel_size, kernel_size)
@@ -63,33 +62,51 @@ class ConvNormActBlock(tf.keras.Model):
         
         if strides != (1, 1):
             dilation_rate = (1, 1)
+        
+        self.filters = filters
+        self.kernel_size = kernel_size
+        self.strides = strides
+        self.dilation_rate = dilation_rate
+        self.data_format = data_format
+        self.groups = groups
+        self.kernel_initializer = kernel_initializer
+        self.gamma_zeros = gamma_zeros
+        self.use_bias = normalization is None
+        if data_format == "channels_first" and normalization:
+            normalization["axis"] = 1
+        self.normalization = normalization
+        self.activation = activation
+        self.dropblock = dropblock
+    
+    def build(self, input_shape):
 
-        if strides == (1, 1):
-            padding == "same"
+        if self.strides == (1, 1):
+            padding = "same"
         else:
-            p = ((kernel_size[0] - 1) // 2, (kernel_size[1] - 1) // 2)
-            self.pad = tf.keras.layers.ZeroPadding2D(p, data_format=data_format)
+            p = ((self.kernel_size[0] - 1) // 2, (self.kernel_size[1] - 1) // 2)
+            self.pad = tf.keras.layers.ZeroPadding2D(p, data_format=self.data_format)
             padding = "valid"
 
-        self.conv = tf.keras.layers.Conv2D(filters=filters, 
-                                           kernel_size=kernel_size, 
-                                           strides=strides, 
+        self.padding = padding
+        self.conv = tf.keras.layers.Conv2D(filters=self.filters, 
+                                           kernel_size=self.kernel_size, 
+                                           strides=self.strides, 
                                            padding=padding, 
-                                           data_format=data_format, 
-                                           dilation_rate=dilation_rate, 
-                                           groups=groups,
-                                           use_bias=False, 
-                                           trainable=trainable,
-                                           kernel_initializer=kernel_initializer,
+                                           data_format=self.data_format, 
+                                           dilation_rate=self.dilation_rate, 
+                                           groups=self.groups,
+                                           use_bias=self.use_bias, 
+                                           trainable=self.trainable,
+                                           kernel_initializer=self.kernel_initializer,
                                            name="conv2d")
-        if gamma_zeros:
-            self.norm = build_normalization(**normalization, name=normalization["normalization"])
+        if self.gamma_zeros:
+            self.norm = build_normalization(**self.normalization, name=self.normalization["normalization"])
         else:
-            self.norm = build_normalization(**normalization,
+            self.norm = build_normalization(**self.normalization,
                                             gamma_initializer="zeros",
-                                            name=normalization["normalization"])
-        self.act = build_activation(**activation, name=activation["activation"]) if activation is not None else None
-        self.dropblock = DropBlock2D(**dropblock, name="dropblock") if dropblock is not None else None
+                                            name=self.normalization["normalization"])
+        self.act = build_activation(**self.activation, name=self.activation["activation"]) if self.activation is not None else None
+        self.dropblock_fn = DropBlock2D(**self.dropblock, name="dropblock") if self.dropblock is not None else None
 
     def call(self, inputs, training=None):
         if hasattr(self, "pad"):
@@ -101,9 +118,22 @@ class ConvNormActBlock(tf.keras.Model):
         if self.act is not None:
             x = self.act(x)
         if self.dropblock is not None:
-            x = self.dropblock(x, training=training)
+            x = self.dropblock_fn(x, training=training)
 
         return x
+    
+    def get_config(self):
+        # used to store/share parameters to reconstruct the model
+        layer_config = dict()
+        layer_config.update(self.conv.get_config())
+        if hasattr(self, "norm"):
+            layer_config.update(self.norm.get_config())
+        if hasattr(self, "act"):
+            layer_config.update(self.act.get_config())
+        # if hasattr(self, "dropblock_fn"):
+        #     layer_config.update(self.dropblock_fn.get_config())
+
+        return layer_config
     
     def fused_call(self, inputs, training=None):
         if hasattr(self, "pad"):
@@ -117,7 +147,7 @@ class ConvNormActBlock(tf.keras.Model):
         return x
 
 
-class DepthwiseConvNormActBlock(tf.keras.Model):
+class DepthwiseConvNormActBlock(tf.keras.layers.Layer):
     """DepthwiseConv2D-Norm-Activation block"""
     def __init__(self, 
                  kernel_size, 
@@ -131,7 +161,7 @@ class DepthwiseConvNormActBlock(tf.keras.Model):
                  activation=None,
                  dropblock=None,
                  name=None):
-        super(DepthwiseConvNormActBlock, self).__init__(name=name)
+        super(DepthwiseConvNormActBlock, self).__init__(trainable=trainable, name=name)
 
         if isinstance(kernel_size, int):
             kernel_size = (kernel_size, kernel_size)
@@ -142,22 +172,36 @@ class DepthwiseConvNormActBlock(tf.keras.Model):
         if strides != (1, 1):
             dilation_rate = (1, 1)
         
-        if padding == "same":
-            p = ((kernel_size[0] - 1) // 2, (kernel_size[1] - 1) // 2)
-            self.pad = tf.keras.layers.ZeroPadding2D(p, data_format=data_format)
+        self.kernel_size = kernel_size
+        self.strides = strides
+        self.dilation_rate = dilation_rate
+        self.data_format = data_format
+        self.kernel_initializer = kernel_initializer
+        self.use_bias = normalization is None
+        if data_format == "channels_first" and normalization:
+            normalization["axis"] = 1
+        self.normalization = normalization
+        self.activation = activation
+        self.dropblock = dropblock
+        self.padding = padding
+        
+    def build(self, input_shape):
+        if self.padding == "same":
+            p = ((self.kernel_size[0] - 1) // 2, (self.kernel_size[1] - 1) // 2)
+            self.pad = tf.keras.layers.ZeroPadding2D(p, data_format=self.data_format)
 
-        self.conv = tf.keras.layers.DepthwiseConv2D(kernel_size=kernel_size, 
-                                                    strides=strides, 
+        self.conv = tf.keras.layers.DepthwiseConv2D(kernel_size=self.kernel_size, 
+                                                    strides=self.strides, 
                                                     padding="valid", 
-                                                    data_format=data_format, 
-                                                    dilation_rate=dilation_rate, 
-                                                    use_bias=False, 
-                                                    trainable=trainable,
-                                                    kernel_initializer=kernel_initializer,
+                                                    data_format=self.data_format, 
+                                                    dilation_rate=self.dilation_rate, 
+                                                    use_bias=self.use_bias, 
+                                                    trainable=self.trainable,
+                                                    kernel_initializer=self.kernel_initializer,
                                                     name="conv2d")
-        self.norm = build_normalization(**normalization, name=normalization["normalization"])
-        self.act = build_activation(**activation, name=activation["activation"]) if activation is not None else None
-        self.dropblock = DropBlock2D(**dropblock, name="dropblock") if dropblock is not None else None
+        self.norm = build_normalization(**self.normalization, name=self.normalization["normalization"])
+        self.act = build_activation(**self.activation, name=self.activation["activation"]) if self.activation is not None else None
+        self.dropblock_fn = DropBlock2D(**self.dropblock, name="dropblock") if self.dropblock is not None else None
 
     def call(self, inputs, training=None):
         if hasattr(self, "pad"):
@@ -170,9 +214,22 @@ class DepthwiseConvNormActBlock(tf.keras.Model):
             x = self.act(x)
         
         if self.dropblock is not None:
-            x = self.dropblock(x, training=training)
+            x = self.dropblock_fn(x, training=training)
 
         return x
+    
+    def get_config(self):
+        # used to store/share parameters to reconstruct the model
+        layer_config = dict()
+        layer_config.update(self.conv.get_config())
+        if hasattr(self, "norm"):
+            layer_config.update(self.norm.get_config())
+        if hasattr(self, "act"):
+            layer_config.update(self.act.get_config())
+        # if hasattr(self, "dropblock_fn"):
+        #     layer_config.update(self.dropblock_fn.get_config())
+
+        return layer_config
 
 
 def fuse_conv_and_bn(conv, bn):

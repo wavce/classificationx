@@ -6,136 +6,115 @@ from .common import ConvNormActBlock
 from core.layers import build_activation
 
 
-class BottleneckX(tf.keras.Model):
-    expansion = 4
+def bottleneckx(inputs,
+                block_index,
+                filters,
+                cardinality,
+                bottleneck_width,
+                strides=1,
+                dilation_rate=1,
+                use_se=False,
+                normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+                activation=dict(activation="relu"),
+                trainable=True,
+                downsample=False,
+                dropblock=None,
+                avg_down=False,
+                last_gamma=False,
+                data_format="channels_last",
+                expansion=4,
+                name=None):
+    d = int(math.floor(filters * (bottleneck_width / 64)))
+    group_width = cardinality * d
 
-    def __init__(self,
-                 block_index,
-                 filters,
-                 cardinality,
-                 bottleneck_width,
-                 strides=1,
-                 dilation_rate=1,
-                 use_se=False,
-                 normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
-                 activation=dict(activation="relu"),
-                 trainable=True,
-                 downsample=False,
-                 dropblock=None,
-                 avg_down=False,
-                 last_gamma=False,
-                 data_format="channels_last",
-                 name=None):
-        super(BottleneckX, self).__init__(name=name)
-
-        d = int(math.floor(filters * (bottleneck_width / 64)))
-        group_width = cardinality * d
-
-        self.conv1 = ConvNormActBlock(filters=group_width,
-                                      kernel_size=1,
-                                      strides=1,
-                                      trainable=trainable,
-                                      data_format=data_format,
-                                      dropblock=dropblock,
-                                      normalization=normalization,
-                                      activation=activation,
-                                      name=name + "/conv%d" % block_index)
-        block_index += 1
-        self.conv2 = ConvNormActBlock(filters=group_width,
-                                      kernel_size=(3, 3),
-                                      strides=strides,
-                                      groups=cardinality,
-                                      dilation_rate=1 if strides == 1 else dilation_rate,
-                                      data_format=data_format,
-                                      trainable=trainable,
-                                      normalization=normalization,
-                                      activation=activation,
-                                      dropblock=dropblock,
-                                      name=name + "/conv%d" % block_index)
-        block_index += 1
-        self.conv3 = ConvNormActBlock(filters=filters * self.expansion,
-                                      kernel_size=1,
-                                      trainable=trainable,
-                                      data_format=data_format,
-                                      normalization=normalization,
-                                      activation=None,
-                                      dropblock=dropblock,
-                                      name=name + "/conv%d" % block_index)
-        self.act = build_activation(**activation, name=name + "/" + activation["activation"] + str(block_index))
-        if use_se:
-            pool_axis = [1, 2] if data_format == "channels_last" else [2, 3]
-            self.se_pool = tf.keras.layers.Lambda(lambda inp: tf.reduce_mean(inp, pool_axis, keepdims=True), name=name + "/se/pool")
-            block_index += 1
-            self.se_conv1 = tf.keras.layers.Conv2D(filters=filters // 4,
-                                                   kernel_size=(1, 1),
-                                                   data_format=data_format,
-                                                   name=name + "/conv%d" % block_index)
-            block_index += 1
-            self.se_conv2 = tf.keras.layers.Conv2D(filters=filters * self.expansion,
-                                                    kernel_size=(1, 1),
-                                                    data_format=data_format,
-                                                    name=name + "/conv%d" % block_index)
-        if downsample:
-            block_index += 1
-            if avg_down:
-                self.shortcut_pool = tf.keras.layers.AvgPool2D(pool_size=strides, 
-                                                               strides=strides, 
-                                                               padding="same", 
-                                                               data_format=data_format, 
-                                                               name=name + "/conv%d/avg_pool" % block_index)
-                self.shortcut_conv = ConvNormActBlock(kernel_size=1, 
-                                                      filters=filters * self.expansion,
-                                                      trainable=trainable,
-                                                      data_format=data_format,
-                                                      normalization=normalization,
-                                                      activation=None,
-                                                      dropblock=dropblock,
-                                                      name=name + "/conv%d" % block_index)
-            else:
-                self.shortcut_conv = ConvNormActBlock(kernel_size=1, 
-                                                      strides=strides,
-                                                      filters=filters * self.expansion,
-                                                      trainable=trainable,
-                                                      data_format=data_format,
-                                                      normalization=normalization,
-                                                      activation=None,
-                                                      dropblock=dropblock,
-                                                      name=name + "/conv%d" % block_index)
-        self.use_se = use_se
+    x = ConvNormActBlock(filters=group_width,
+                         kernel_size=1,
+                         strides=1,
+                         trainable=trainable,
+                         data_format=data_format,
+                         dropblock=dropblock,
+                         normalization=normalization,
+                         activation=activation,
+                         name=name + "/conv%d" % block_index)(inputs)
+    block_index += 1
+    x = ConvNormActBlock(filters=group_width,
+                         kernel_size=(3, 3),
+                         strides=strides,
+                         groups=cardinality,
+                         dilation_rate=1 if strides == 1 else dilation_rate,
+                         data_format=data_format,
+                         trainable=trainable,
+                         normalization=normalization,
+                         activation=activation,
+                         dropblock=dropblock,
+                         name=name + "/conv%d" % block_index)(x)
+    block_index += 1
+    x = ConvNormActBlock(filters=filters * self.expansion,
+                         kernel_size=1,
+                         trainable=trainable,
+                         data_format=data_format,
+                         normalization=normalization,
+                         activation=None,
+                         dropblock=dropblock,
+                         name=name + "/conv%d" % block_index)(x)
     
-    def __call__(self, inputs, training=None):
-        shortcut = inputs
+    if use_se:
+        pool_axis = [1, 2] if data_format == "channels_last" else [2, 3]
+        se = tf.keras.layers.Lambda(lambda inp: tf.reduce_mean(inp, pool_axis, keepdims=True), 
+                                    name=name + "/se/pool")(x)
+        block_index += 1
+        se = tf.keras.layers.Conv2D(filters=filters // 4,
+                                    kernel_size=(1, 1),
+                                    data_format=data_format,
+                                    name=name + "/conv%d" % block_index)(se)
+        block_index += 1
+        se = tf.keras.layers.Conv2D(filters=filters * expansion,
+                                    kernel_size=(1, 1),
+                                    data_format=data_format,
+                                    name=name + "/conv%d" % block_index)(se)
+        se = tf.keras.layers.Activation("sigmoid", name=name + "/sigmoid")(se)
+        x = tf.keras.layers.Multiply(name=name + "/multiply")([x, se])
 
-        x = self.conv1(inputs, training=training)
-        x = self.conv2(x, training=training)
-        x = self.conv3(x, training=training)
-
-        if self.use_se:
-            se = self.se_pool(x)
-            se = self.se_conv1(se)
-            se = self.act(se)
-            se = self.se_conv2(se)
-            se = tf.nn.sigmoid(se)
-            x *= se
-        if hasattr(self, "shortcut_pool"):
-            shortcut = self.shortcut_pool(shortcut)
-        if hasattr(self, "shortcut_conv"):
-            shortcut = self.shortcut_conv(shortcut, training=training)
-        
-        x += shortcut
-        x = self.act(x)
-        
-        return x
+    shortcut = inputs
+    if downsample:
+        block_index += 1
+        if avg_down:
+            shortcut = tf.keras.layers.AvgPool2D(pool_size=strides, 
+                                                 strides=strides, 
+                                                 padding="same", 
+                                                 data_format=data_format, 
+                                                 name=name + "/avg_pool")(shortcut)
+            shortcut = ConvNormActBlock(kernel_size=1, 
+                                        filters=filters * expansion,
+                                        trainable=trainable,
+                                        data_format=data_format,
+                                        normalization=normalization,
+                                        activation=None,
+                                        dropblock=dropblock,
+                                        name=name + "/conv%d" % block_index)(shortcut)
+        else:
+            shortcut = ConvNormActBlock(kernel_size=1, 
+                                        strides=strides,
+                                        filters=filters * expansion,
+                                        trainable=trainable,
+                                        data_format=data_format,
+                                        normalization=normalization,
+                                        activation=None,
+                                        dropblock=dropblock,
+                                        name=name + "/conv%d" % block_index)(shortcut)
+    x = tf.keras.layers.Add(name=name + "/add")([x, shortcut])
+    x = build_activation(**activation, name=name + "/" + activation["activation"] + str(block_index))(x)
+    
+    return x
             
 
 class ResNeXt(Model):
     def __init__(self, 
                  name, 
                  deep_stem=False,
-                 block_fn=BottleneckX,
+                 block_fn=bottleneckx,
                  num_blocks=(3, 4, 6, 3),
                  stem_filters=32,
-                 convolution='conv2d', 
                  cardinality=32,
                  bottleneck_width=64,
                  use_se=False,
@@ -244,7 +223,8 @@ class ResNeXt(Model):
 
     def _make_stage(self, x, filters, num_blocks, strides=1, dilation_rate=1, trainable=True, name=None):
         block_index = 0
-        x = self.block_fn(block_index,
+        x = self.block_fn(x,
+                          block_index,
                           cardinality=self.cardinality,
                           use_se=self.use_se,
                           bottleneck_width=self.bottleneck_width,
@@ -259,10 +239,11 @@ class ResNeXt(Model):
                           last_gamma=self.last_gamma,
                           avg_down=self.avg_down,
                           data_format=self.data_format,
-                          name=name)(x)
+                          name=name)
         block_index = block_index + 6 if self.use_se else block_index + 4
         for _ in range(1, num_blocks):
-            x = self.block_fn(block_index,
+            x = self.block_fn(x, 
+                              block_index,
                               cardinality=self.cardinality,
                               use_se=self.use_se,
                               bottleneck_width=self.bottleneck_width,
@@ -277,16 +258,14 @@ class ResNeXt(Model):
                               last_gamma=self.last_gamma,
                               avg_down=self.avg_down,
                               data_format=self.data_format,
-                              name=name)(x)
+                              name=name)
             n = 5 if self.use_se else 3
             block_index += n
         return x
     
 
-
 @MODELS.register("ResNeXt50_32X4D")
-def ResNeXt50_32X4D(convolution='conv2d', 
-                    normalization=dict(normalization ='batch_norm', momentum =0.9, epsilon =1e-05, axis = -1, trainable =True), 
+def ResNeXt50_32X4D(normalization=dict(normalization ='batch_norm', momentum =0.9, epsilon =1e-05, axis = -1, trainable =True), 
                     activation=dict(activation ='relu'), 
                     output_indices=(3, 4), 
                     strides=(2, 2, 2, 2, 2), 
@@ -307,7 +286,6 @@ def ResNeXt50_32X4D(convolution='conv2d',
                    cardinality=32,
                    use_se=False,
                    bottleneck_width=4,
-                   convolution=convolution, 
                    normalization=normalization, 
                    activation=activation, 
                    output_indices=output_indices, 
@@ -325,8 +303,7 @@ def ResNeXt50_32X4D(convolution='conv2d',
 
 
 @MODELS.register("ResNeXt101_32X4D")
-def ResNeXt101_32X4D(convolution='conv2d', 
-                     normalization=dict(normalization ='batch_norm', momentum =0.9, epsilon =1e-05, axis = -1, trainable =True), 
+def ResNeXt101_32X4D(normalization=dict(normalization ='batch_norm', momentum =0.9, epsilon =1e-05, axis = -1, trainable =True), 
                      activation=dict(activation ='relu'), 
                      output_indices=(3, 4), 
                      strides=(2, 2, 2, 2, 2), 
@@ -346,7 +323,6 @@ def ResNeXt101_32X4D(convolution='conv2d',
                    cardinality=32,
                    use_se=False,
                    bottleneck_width=4,
-                   convolution=convolution, 
                    normalization=normalization, 
                    activation=activation, 
                    output_indices=output_indices, 
@@ -363,8 +339,7 @@ def ResNeXt101_32X4D(convolution='conv2d',
 
 
 @MODELS.register("ResNeXt101_64X4D")
-def ResNeXt101_64X4D(convolution='conv2d', 
-                     normalization=dict(normalization ='batch_norm', momentum =0.9, epsilon =1e-05, axis = -1, trainable =True), 
+def ResNeXt101_64X4D(normalization=dict(normalization ='batch_norm', momentum =0.9, epsilon =1e-05, axis = -1, trainable =True), 
                      activation=dict(activation ='relu'), 
                      output_indices=(3, 4), 
                      strides=(2, 2, 2, 2, 2), 
@@ -384,7 +359,6 @@ def ResNeXt101_64X4D(convolution='conv2d',
                    cardinality=64,
                    use_se=False,
                    bottleneck_width=4,
-                   convolution=convolution, 
                    normalization=normalization, 
                    activation=activation, 
                    output_indices=output_indices, 
@@ -401,8 +375,7 @@ def ResNeXt101_64X4D(convolution='conv2d',
 
 
 @MODELS.register("ResNeXt101B_64X4D")
-def ResNeXt101B_64X4D(convolution='conv2d', 
-                      normalization=dict(normalization ='batch_norm', momentum =0.9, epsilon =1e-05, axis = -1, trainable =True), 
+def ResNeXt101B_64X4D(normalization=dict(normalization ='batch_norm', momentum =0.9, epsilon =1e-05, axis = -1, trainable =True), 
                       activation=dict(activation ='relu'), 
                       output_indices=(3, 4), 
                       strides=(2, 2, 2, 2, 2), 
@@ -422,7 +395,6 @@ def ResNeXt101B_64X4D(convolution='conv2d',
                    cardinality=64,
                    use_se=False,
                    bottleneck_width=4,
-                   convolution=convolution, 
                    normalization=normalization, 
                    activation=activation, 
                    output_indices=output_indices, 
@@ -439,8 +411,7 @@ def ResNeXt101B_64X4D(convolution='conv2d',
 
 
 @MODELS.register("SEResNeXt50_32X4D")
-def SEResNeXt50_32X4D(convolution='conv2d', 
-                      normalization=dict(normalization ='batch_norm', momentum =0.9, epsilon =1e-05, axis = -1, trainable =True), 
+def SEResNeXt50_32X4D(normalization=dict(normalization ='batch_norm', momentum =0.9, epsilon =1e-05, axis = -1, trainable =True), 
                       activation=dict(activation ='relu'), 
                       output_indices=(3, 4), 
                       strides=(2, 2, 2, 2, 2), 
@@ -460,7 +431,6 @@ def SEResNeXt50_32X4D(convolution='conv2d',
                    cardinality=32,
                    use_se=True,
                    bottleneck_width=4,
-                   convolution=convolution, 
                    normalization=normalization, 
                    activation=activation, 
                    output_indices=output_indices, 
@@ -477,8 +447,7 @@ def SEResNeXt50_32X4D(convolution='conv2d',
 
 
 @MODELS.register("SEResNeXt101_32X4D")
-def SEResNeXt101_32X4D(convolution='conv2d', 
-                       normalization=dict(normalization ='batch_norm', momentum =0.9, epsilon =1e-05, axis = -1, trainable =True), 
+def SEResNeXt101_32X4D(normalization=dict(normalization ='batch_norm', momentum =0.9, epsilon =1e-05, axis = -1, trainable =True), 
                        activation=dict(activation ='relu'), 
                        output_indices=(3, 4), 
                        strides=(2, 2, 2, 2, 2), 
@@ -498,7 +467,6 @@ def SEResNeXt101_32X4D(convolution='conv2d',
                    cardinality=32,
                    use_se=True,
                    bottleneck_width=4,
-                   convolution=convolution, 
                    normalization=normalization, 
                    activation=activation, 
                    output_indices=output_indices, 
@@ -515,8 +483,7 @@ def SEResNeXt101_32X4D(convolution='conv2d',
 
 
 @MODELS.register("SEResNeXt101_64X4D")
-def SEResNeXt101_64X4D(convolution='conv2d', 
-                       normalization=dict(normalization ='batch_norm', momentum =0.9, epsilon =1e-05, axis = -1, trainable =True), 
+def SEResNeXt101_64X4D(normalization=dict(normalization ='batch_norm', momentum =0.9, epsilon =1e-05, axis = -1, trainable =True), 
                        activation=dict(activation ='relu'), 
                        output_indices=(3, 4), 
                        strides=(2, 2, 2, 2, 2), 
@@ -536,7 +503,6 @@ def SEResNeXt101_64X4D(convolution='conv2d',
                    cardinality=64,
                    use_se=True,
                    bottleneck_width=4,
-                   convolution=convolution, 
                    normalization=normalization, 
                    activation=activation, 
                    output_indices=output_indices, 
@@ -553,8 +519,7 @@ def SEResNeXt101_64X4D(convolution='conv2d',
 
 
 @MODELS.register("SEResNeXt101E_64X4D")
-def SEResNeXt101E_64X4D(convolution='conv2d', 
-                        normalization=dict(normalization ='batch_norm', momentum =0.9, epsilon =1e-05, axis = -1, trainable =True), 
+def SEResNeXt101E_64X4D(normalization=dict(normalization ='batch_norm', momentum =0.9, epsilon =1e-05, axis = -1, trainable =True), 
                         activation=dict(activation ='relu'), 
                         output_indices=(-1, ), 
                         strides=(2, 2, 2, 2, 2), 
@@ -575,7 +540,6 @@ def SEResNeXt101E_64X4D(convolution='conv2d',
                    cardinality=64,
                    use_se=True,
                    bottleneck_width=4,
-                   convolution=convolution, 
                    normalization=normalization, 
                    activation=activation, 
                    output_indices=output_indices, 

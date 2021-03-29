@@ -178,7 +178,7 @@ def get_weight_names_map(num_blocks, num_no_expand_blocks=1):
     return block_map
     
 
-class MBConvBlock(tf.keras.Model):
+class MBConvBlock(tf.keras.layers.Layer):
     def __init__(self,
                  global_params,
                  block_args,
@@ -187,33 +187,40 @@ class MBConvBlock(tf.keras.Model):
                  drop_connect_rate=None,
                  trainable=True,
                  name=None):
-        super(MBConvBlock, self).__init__(name=name)
+        super(MBConvBlock, self).__init__(trainable=trainable, name=name)
         self.expand_ratio = block_args.expand_ratio
-        data_format = global_params.data_format
 
         _axis = normalization["axis"]
         self.mean_axis = [1, 2] if _axis == -1 or _axis == 3 else [2, 3]
-        filters = block_args.in_filters * self.expand_ratio
+        self.block_args = block_args
+        self.global_params = global_params
+        self.normalization = normalization
+        self.activation = activation
+        self.drop_connect_rate = drop_connect_rate
+
+    def build(self, input_shape):
+        data_format = self.global_params.data_format
+        filters = self.block_args.in_filters * self.expand_ratio
         if self.expand_ratio != 1:
             self.expand = ConvNormActBlock(filters=filters, 
-                                      kernel_size=(1, 1), 
-                                      trainable=trainable, 
-                                      normalization=normalization,
-                                      kernel_initializer=conv2d_kernel_initializer,
-                                      activation=activation,
-                                      name="expand")
+                                           kernel_size=(1, 1), 
+                                           trainable=self.trainable, 
+                                           normalization=self.normalization,
+                                           kernel_initializer=conv2d_kernel_initializer,
+                                           activation=self.activation,
+                                           name="expand")
 
-        self.depthwise = DepthwiseConvNormActBlock(kernel_size=block_args.kernel_size,
-                                              strides=block_args.strides,
-                                              data_format=data_format,
-                                              normalization=normalization,
-                                              activation=activation,
-                                              kernel_initializer=conv2d_kernel_initializer,
-                                              name="depthwise")
+        self.depthwise = DepthwiseConvNormActBlock(kernel_size=self.block_args.kernel_size,
+                                                   strides=self.block_args.strides,
+                                                   data_format=data_format,
+                                                   normalization=self.normalization,
+                                                   activation=self.activation,
+                                                   kernel_initializer=conv2d_kernel_initializer,
+                                                   name="depthwise")
        
-        has_se = block_args.se_ratio is not None and 0 < block_args.se_ratio < 1
+        has_se = self.block_args.se_ratio is not None and 0 < self.block_args.se_ratio < 1
         if has_se:
-            squeezed_filters = max(1, int(block_args.in_filters * block_args.se_ratio))
+            squeezed_filters = max(1, int(self.block_args.in_filters * self.block_args.se_ratio))
             self.se_reduce = tf.keras.layers.Conv2D(filters=squeezed_filters,
                                                     kernel_size=(1, 1),
                                                     strides=(1, 1),
@@ -221,7 +228,7 @@ class MBConvBlock(tf.keras.Model):
                                                     data_format=data_format,
                                                     use_bias=True,
                                                     kernel_initializer=conv2d_kernel_initializer,
-                                                    trainable=trainable,
+                                                    trainable=self.trainable,
                                                     name="se/conv2d")
             self.swish = tf.keras.layers.Activation("swish")
             self.se_expand = tf.keras.layers.Conv2D(filters=filters,
@@ -230,23 +237,23 @@ class MBConvBlock(tf.keras.Model):
                                                     padding="same",
                                                     data_format=data_format,
                                                     use_bias=True,
-                                                    trainable=trainable,
+                                                    trainable=self.trainable,
                                                     kernel_initializer=conv2d_kernel_initializer,
                                                     name="se/conv2d_1")
         
-        self.project = ConvNormActBlock(block_args.out_filters,
-                                   kernel_size=(1, 1),
-                                   trainable=trainable,
-                                   normalization=normalization,
-                                   activation=None,
-                                   kernel_initializer=conv2d_kernel_initializer,
-                                   name="project")
+        self.project = ConvNormActBlock(self.block_args.out_filters,
+                                        kernel_size=(1, 1),
+                                        trainable=self.trainable,
+                                        normalization=self.normalization,
+                                        activation=None,
+                                        kernel_initializer=conv2d_kernel_initializer,
+                                        name="project")
         
         self._id_skip = False
-        if block_args.id_skip:
-            if all(s == 1 for s in block_args.strides) and block_args.in_filters == block_args.out_filters:
-                if drop_connect_rate > 0:
-                    self.drop_connect = DropConnect(drop_connect_rate, name=name + "/drop_connect")
+        if self.block_args.id_skip:
+            if all(s == 1 for s in self.block_args.strides) and self.block_args.in_filters == self.block_args.out_filters:
+                if self.drop_connect_rate > 0:
+                    self.drop_connect = DropConnect(self.drop_connect_rate, name=name + "/drop_connect")
                 self._id_skip = True
         self._has_se = has_se
     
@@ -274,6 +281,23 @@ class MBConvBlock(tf.keras.Model):
             x += inputs
         
         return x
+    
+    def get_config(self):
+        # used to store/share parameters to reconstruct the model
+        layer_config = {
+            "kernel_initializer": conv2d_kernel_initializer,
+            "mean_aixs": self.mean_axis,
+            "id_skip": self._id_skip,
+            "has_se": self._has_se,
+            "drop_connect_rate": self.drop_connect_rate
+        }
+        layer_config.update(self.depthwise.norm.get_config())
+        layer_config.update(self.swish.get_config())
+
+        return layer_config
+
+    def __repr__(self):
+        return repr(self.get_config())
 
 
 class EfficientNet(Model):
@@ -303,7 +327,6 @@ class EfficientNet(Model):
 
     def __init__(self,
                  name,
-                 convolution='conv2d', 
                  normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-3, axis=-1, trainable=True), 
                  activation=dict(activation="swish"), 
                  output_indices=(3, 4), 
@@ -322,7 +345,6 @@ class EfficientNet(Model):
         input_shape = input_shape or default_shape
 
         super(EfficientNet, self).__init__(name=name,
-                                           convolution=convolution,
                                            normalization=normalization, 
                                            activation=activation, 
                                            output_indices=output_indices, 

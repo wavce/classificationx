@@ -4,6 +4,7 @@ from .efficientnet import (EfficientNetB0, EfficientNetB1, EfficientNetB2, Effic
                            EfficientNetB4, EfficientNetB5, EfficientNetB6, EfficientNetB7)
 from .darknet53 import Darknet53, CSPDarknet53
 from .resnet import ResNet18, ResNet34, ResNet50, ResNet101, ResNet152
+from .resnet_v1b import ResNet50V1D, ResNet101V1D, ResNet152V1D, ResNet50V1E, ResNet152V1E, ResNet152V1E
 from .res2net import Res2Net50_14W8S, Res2Net50_26W4S, Res2Net50_26W6S, Res2Net50_26W8S, Res2Net50_48W2S, Res2Net101_26W4S
 from .res2net_v1b import Res2NetV1B50V1B_14W8S, Res2NetV1B50V1B_26W4S, Res2NetV1B50V1B_26W6S, Res2NetV1B50V1B_26W8S, Res2NetV1B50V1B_48W2S, Res2NetV1B101V1B_26W4S
 from .densenet import DenseNet169, DenseNet121, DenseNet201

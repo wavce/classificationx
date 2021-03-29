@@ -306,4 +306,3 @@ if __name__ == '__main__':
     
     model.save_weights("/Users/bailang/Downloads/pretrained_weights/%s.h5" % name)
     model.save_weights("/Users/bailang/Downloads/pretrained_weights/%s/model.ckpt" % name)
-
