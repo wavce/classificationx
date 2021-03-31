@@ -1,10 +1,9 @@
 import tensorflow  as tf 
-from .backbone import Backbone
-from ..builder import BACKBONES
-from core.layers import GroupConv2D
-from core.layers import DropBlock2D
+from .model import Model
+from .builder import MODELS
+from .common import ConvNormActBlock
 from core.layers import build_activation
-from core.layers import build_normalization
+
 
 import sys
 sys.setrecursionlimit(100000)
@@ -39,7 +38,6 @@ def SplAtConv2d(inputs,
                 dilation_rate=1,
                 cardinality=1,
                 radix=2,
-                use_bias=True,
                 reduction_factor=4,
                 data_format="channels_last",
                 trainable=True,
@@ -50,21 +48,18 @@ def SplAtConv2d(inputs,
     act = activation["activation"]
 
     channel_axis = -1 if (data_format == "channels_last" or data_format is None) else 1
-    x = GroupConv2D(filters=filters * radix,
-                    kernel_size=kernel_size,
-                    strides=strides,
-                    padding="same",
-                    dilation_rate=dilation_rate,
-                    group=cardinality * radix,
-                    trainable=trainable,
-                    data_format=data_format,
-                    use_bias=use_bias,
-                    name=name + "/conv")(inputs)
-    x = build_normalization(**normalization, name=name + "/bn0")(x)
-    if dropblock is not None:
-        x = DropBlock2D(**dropblock, data_format=data_format, name=name + "/dropblock")(x)
-    x = build_activation(**activation, name=name + "/%s0" % act)(x)
-    
+    x = ConvNormActBlock(filters=filters * radix,
+                         kernel_size=kernel_size,
+                         strides=strides,
+                         padding="same",
+                         dilation_rate=dilation_rate,
+                         groups=cardinality * radix,
+                         trainable=trainable,
+                         data_format=data_format,
+                         normalization=normalization,
+                         dropblock=dropblock,
+                         activation=activation,
+                         name=name + "/conv")(inputs)
     # Split 
     b, h, w, c = tf.keras.backend.int_shape(x)
     if radix > 1:
@@ -81,18 +76,20 @@ def SplAtConv2d(inputs,
         name=name + "/add1")(gap)
 
     inter_filters = max(in_filters * radix // reduction_factor, 32)
-    gap = GroupConv2D(filters=inter_filters,
-                      kernel_size=(1, 1),
-                      trainable=trainable,
-                      group=cardinality,
-                      name=name + "/fc1")(gap)
-    gap = build_normalization(**normalization, name=name + "/bn1")(gap)
-    gap = build_activation(**activation, name=name + "/%s1" % act)(gap)
-    gap = GroupConv2D(filters=filters * radix,
-                      kernel_size=(1, 1),
-                      trainable=trainable,
-                      group=cardinality,
-                      name=name + "/fc2")(gap)
+    gap = ConvNormActBlock(filters=inter_filters,
+                           kernel_size=(1, 1),
+                           trainable=trainable,
+                           groups=cardinality,
+                           normalization=normalization,
+                           activation=activation,
+                           name=name + "/fc1")(gap)
+    gap = ConvNormActBlock(filters=filters * radix,
+                           kernel_size=(1, 1),
+                           trainable=trainable,
+                           groups=cardinality,
+                           normalization=None,
+                           activation=None,
+                           name=name + "/fc2")(gap)
     attn = RSoftMax(radix, cardinality, name=name + "/rsoftmax")(gap)
 
     if radix > 1:
@@ -118,7 +115,7 @@ def bottleneck(inputs,
                strides=1, 
                dilation_rate=1,
                data_format="channels_last",
-               dropblock=dict(block_size=7, drop_rate=0.1),
+               dropblock=None,
                normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
                activation=dict(activation="relu"),
                avg_down=False,
@@ -129,19 +126,16 @@ def bottleneck(inputs,
                trainable=True,
                name="bottleneck"):
     avd = avd and (strides > 1 or is_first)
-    shortcut = inputs
     act = activation["activation"]
     group_width = int(filters * (bottleneck_width / 64.)) * cardinality
-    x = tf.keras.layers.Conv2D(filters=group_width, 
-                               kernel_size=(1, 1), 
-                               use_bias=False, 
-                               data_format=data_format,
-                               trainable=trainable,
-                               name=name + "/conv1")(inputs)
-    x = build_normalization(**normalization, name=name + "/bn1")(x)
-    if dropblock is not None and len(dropblock) > 0:
-        x = DropBlock2D(**dropblock, data_format=data_format, name=name + "/dropblock1")(x)
-    x = build_activation(**activation, name=name + "/%s1" % act)(x)
+    x = ConvNormActBlock(filters=group_width, 
+                        kernel_size=(1, 1), 
+                        data_format=data_format,
+                        trainable=trainable,
+                        normalization=normalization,
+                        activation=activation,
+                        dropblock=dropblock,
+                        name=name + "/conv1")(inputs)
 
     if avd and avd_first:
         x = tf.keras.layers.AvgPool2D(pool_size=(3, 3), 
@@ -159,7 +153,6 @@ def bottleneck(inputs,
                         dilation_rate=dilation_rate,
                         cardinality=cardinality,
                         radix=radix,
-                        use_bias=False,
                         reduction_factor=4,
                         data_format=data_format,
                         normalization=normalization,
@@ -168,20 +161,18 @@ def bottleneck(inputs,
                         trainable=trainable,
                         name=name + "/conv2")
     else:
-        x = GroupConv2D(filters=group_width, 
-                        kernel_size=(3, 3), 
-                        strides=1 if avd else strides,
-                        padding="same",
-                        use_bias=False,
-                        group=cardinality,
-                        trainable=trainable,
-                        data_format=data_format,
-                        name=name + "/conv2")(x)
-        x = build_normalization(**normalization, name=name + '/bn2')(x)
-        
-        if dropblock is not None and len(dropblock) > 0:
-            x = DropBlock2D(**dropblock, data_format=data_format, name=name + "/dropblock2")(x)
-        x = build_activation(**activation, name=name + "/%s2" % act)(x)
+        x = ConvNormActBlock(filters=group_width, 
+                             kernel_size=(3, 3), 
+                             strides=1 if avd else strides,
+                             padding="same",
+                             use_bias=False,
+                             group=cardinality,
+                             trainable=trainable,
+                             data_format=data_format,
+                             normalization=normalization,
+                             dropblock=dropblock,
+                             activation=activation,
+                             name=name + "/conv2")(x)
     
     if avd and not avd_first:
         x = tf.keras.layers.AvgPool2D(pool_size=(3, 3), 
@@ -190,64 +181,51 @@ def bottleneck(inputs,
                                       data_format=data_format,
                                       name=name + "/avd_layer")(x)
     
-    x = tf.keras.layers.Conv2D(filters=filters * 4, 
-                               kernel_size=(1, 1), 
-                               use_bias=False, 
-                               trainable=trainable,
-                               data_format=data_format,
-                               name=name + "/conv3")(x)
-    if last_gamma:
-        x = build_normalization(**normalization, gamma_initializer="zeros", name=name + "/bn3")(x)
-    else:
-        x = build_normalization(**normalization, name=name + "/bn3")(x)
-    if dropblock is not None and len(dropblock) > 0:
-        x = DropBlock2D(**dropblock, data_format=data_format, name=name + "/dropblock3")(x)
+    x = ConvNormActBlock(filters=filters * 4, 
+                         kernel_size=(1, 1), 
+                         trainable=trainable,
+                         data_format=data_format,
+                         normalization=normalization,
+                         dropblock=dropblock,
+                         activation=None,
+                         gamma_zeros=last_gamma,
+                         name=name + "/conv3")(x)
 
+    shortcut = inputs
     if strides != 1 or filters * 4 != in_filters:
-        down_layers = tf.keras.Sequential(name=name + "/downsample")
         if avg_down:
             if dilation_rate == 1:
-                down_layers.add(tf.keras.layers.AvgPool2D(pool_size=strides, 
-                                                          strides=strides, 
-                                                          padding="same", 
-                                                          data_format=data_format,
-                                                          name="0"))
+                shorcut = tf.keras.layers.AvgPool2D(pool_size=strides, 
+                                                    strides=strides, 
+                                                    padding="same", 
+                                                    data_format=data_format,
+                                                    name=name + "/downsample/avgpool")(shorcut)
             else:
-                down_layers.add(tf.keras.layers.AvgPool2D(pool_size=1, 
-                                                          strides=1, 
-                                                          padding="same", 
-                                                          data_format=data_format,
-                                                          name="0"))
-            down_layers.add(tf.keras.layers.Conv2D(kernel_size=1, 
-                                                   filters=filters * 4,
-                                                   strides=1,
-                                                   padding="same",
-                                                   use_bias=False,
-                                                   trainable=trainable,
-                                                   data_format=data_format,
-                                                   name="1"))
-        else:
-            down_layers.add(tf.keras.layers.Conv2D(filters=filters * 4, 
-                                                   kernel_size=1, 
-                                                   strides=strides,
-                                                   use_bias=False,
-                                                   padding="same",
-                                                   trainable=trainable,
-                                                   data_format=data_format,
-                                                   name="1"))
-        down_layers.add(build_normalization(**normalization, name="2"))
-       
-        if dropblock is not None and len(dropblock) > 0:
-            down_layers.add(DropBlock2D(**dropblock, data_format=data_format, name="3"))
-        shortcut = down_layers(shortcut)
-        
+                shortcut = tf.keras.layers.AvgPool2D(pool_size=1, 
+                                                     strides=1, 
+                                                     padding="same", 
+                                                     data_format=data_format,
+                                                     name=name + "/downsample/avgpool")(shorcut)
+            strides = 1
+    
+        shortcut = ConvNormActBlock(filters=filters * 4, 
+                                         kernel_size=1, 
+                                         strides=strides,
+                                         use_bias=False,
+                                         padding="same",
+                                         trainable=trainable,
+                                         data_format=data_format,
+                                         normalization=normalization,
+                                         dropblock=dropblock,
+                                         activation=None,
+                                         name=name + "/downsample")(shortcut)
     x = tf.keras.layers.Add(name=name + "/sum")([x, shortcut])
     x = build_activation(**activation, name=name + "/%s3" % act)(x)
 
     return x
 
 
-class ResNeSt(Backbone):
+class ResNeSt(Model):
     def __init__(self,
                  name,
                  block_fn,
@@ -257,7 +235,6 @@ class ResNeSt(Backbone):
                  radix=2,
                  cardinality=1,
                  bottleneck_width=64,
-                 convolution="conv2d",
                  normalization=dict(),
                  last_gamma=False,
                  activation=dict(),
@@ -274,7 +251,6 @@ class ResNeSt(Backbone):
                  num_classes=1000,
                  drop_rate=0.5):
         super(ResNeSt, self).__init__(name, 
-                                      convolution=convolution, 
                                       normalization=normalization, 
                                       activation=activation, 
                                       output_indices=output_indices, 
@@ -299,52 +275,38 @@ class ResNeSt(Backbone):
         self.last_gamma = last_gamma
     
     def build_model(self):
-        act = self.activation["activation"]
         def _norm(inp):
-            inp -= tf.constant([0.485, 0.456, 0.406], tf.float32, [1, 1, 1, 3])
-            inp /= tf.constant([0.229, 0.224, 0.225], tf.float32, [1, 1, 1, 3])
-
-            return inp
+            mean = tf.constant([0.485, 0.456, 0.406], inp.dtype, [1, 1, 1, 3]) * 255.
+            std = 1. / (tf.constant([0.229, 0.224, 0.225], inp.dtype, [1, 1, 1, 3]) * 255.)
+            return (inp - mean) * std  
         x = tf.keras.layers.Lambda(_norm, name="norm_input")(self.img_input) 
         if not self.deep_stem:
-            x = tf.keras.layers.Conv2D(filters=64, 
-                                       kernel_size=(7, 7), 
-                                       strides=(2, 2), 
-                                       padding="same", 
-                                       data_format=self.data_format, 
-                                       use_bias=False,
-                                       name="conv1")(x)
+            x = ConvNormActBlock(filters=64, 
+                                 kernel_size=7, 
+                                 strides=2, 
+                                 data_format=self.data_format, 
+                                 normalization=self.normalization,
+                                 activation=self.activation,
+                                 dropblock=self.dropblock,
+                                 name="conv1")(x)
         else:
-            x = tf.keras.Sequential([
-                tf.keras.layers.Conv2D(filters=self.stem_width, 
-                                       kernel_size=(3, 3), 
-                                       strides=(2, 2), 
-                                       padding="same", 
-                                       data_format=self.data_format, 
-                                       use_bias=False,
-                                       name="0"),
-                build_normalization(**self.normalization, name="1"),
-                build_activation(**self.activation, name="2"),
-                tf.keras.layers.Conv2D(filters=self.stem_width, 
-                                       kernel_size=(3, 3), 
-                                       strides=(1, 1), 
-                                       padding="same", 
-                                       data_format=self.data_format, 
-                                       use_bias=False,
-                                       name="3"),
-                build_normalization(**self.normalization, name="4"),
-                build_activation(**self.activation, name="5"),
-                tf.keras.layers.Conv2D(filters=self.stem_width * 2, 
-                                       kernel_size=(3, 3), 
-                                       strides=(1, 1), 
-                                       padding="same", 
-                                       data_format=self.data_format, 
-                                       use_bias=False,
-                                       name="6")
-            ], name="conv1")(x)
+            x = ConvNormActBlock(filters=self.stem_width, 
+                                 kernel_size=3, 
+                                 strides=2, 
+                                 data_format=self.data_format, 
+                                 normalization=self.normalization,
+                                 activation=self.activation,
+                                 dropblock=self.dropblock,
+                                 name="conv1/1")(x)
+            x = ConvNormActBlock(filters=self.stem_width, 
+                                 kernel_size=3, 
+                                 strides=1, 
+                                 data_format=self.data_format, 
+                                 normalization=self.normalization,
+                                 activation=self.activation,
+                                 dropblock=self.dropblock,
+                                 name="conv1/1")(x)
             
-        x = build_normalization(**self.normalization, name="bn1")(x)
-        x = build_activation(**self.activation, name="%s1" % act)(x)
         outputs = [x]
         x = tf.keras.layers.MaxPool2D(pool_size=(3, 3), 
                                       strides=self.strides[1], 
@@ -441,19 +403,10 @@ class ResNeSt(Backbone):
                               name=name + "/%d" % i)
         return x
 
-    def init_weights(self, pretrained_weights_path):
-        import os
-        
-        if os.path.exists(pretrained_weights_path):
-            self.model.load_weights(pretrained_weights_path, by_name=True)
-            tf.print("Initialized weights from", pretrained_weights_path)
-        else:
-            tf.print(pretrained_weights_path, "not exists! Initialized weights from scratch.")
 
 
-@BACKBONES.register("ResNeSt50")
-def ResNeSt50(convolution='conv2d', 
-              normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+@MODELS.register("ResNeSt50")
+def ResNeSt50(normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
               activation=dict(activation="relu"),
               output_indices=(-1, ), 
               strides=(2, 2, 2, 2, 2), 
@@ -474,7 +427,6 @@ def ResNeSt50(convolution='conv2d',
                    radix=2,
                    cardinality=1,
                    bottleneck_width=64,
-                   convolution="conv2d",
                    normalization=normalization,
                    last_gamma=last_gamma,
                    activation=activation,
@@ -492,9 +444,8 @@ def ResNeSt50(convolution='conv2d',
                    drop_rate=drop_rate).build_model()
 
 
-@BACKBONES.register("ResNeSt101")
-def ResNeSt101(convolution='conv2d', 
-               normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+@MODELS.register("ResNeSt101")
+def ResNeSt101(normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
                activation=dict(activation="relu"),
                output_indices=(-1, ), 
                strides=(2, 2, 2, 2, 2), 
@@ -515,7 +466,6 @@ def ResNeSt101(convolution='conv2d',
                        radix=2,
                        cardinality=1,
                        bottleneck_width=64,
-                       convolution="conv2d",
                        normalization=normalization,
                        last_gamma=last_gamma,
                        activation=activation,
@@ -533,9 +483,8 @@ def ResNeSt101(convolution='conv2d',
                        drop_rate=drop_rate).build_model()
 
 
-@BACKBONES.register("ResNeSt152")
-def ResNeSt152(convolution='conv2d', 
-               normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+@MODELS.register("ResNeSt152")
+def ResNeSt152(normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
                activation=dict(activation="relu"),
                output_indices=(-1, ), 
                strides=(2, 2, 2, 2, 2), 
@@ -556,7 +505,6 @@ def ResNeSt152(convolution='conv2d',
                        radix=2,
                        cardinality=1,
                        bottleneck_width=64,
-                       convolution="conv2d",
                        normalization=normalization,
                        last_gamma=last_gamma,
                        activation=activation,
@@ -574,9 +522,8 @@ def ResNeSt152(convolution='conv2d',
                        drop_rate=drop_rate).build_model()
 
 
-@BACKBONES.register("ResNeSt200")
-def ResNeSt200(convolution='conv2d', 
-               normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+@MODELS.register("ResNeSt200")
+def ResNeSt200(normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
                activation=dict(activation="relu"),
                output_indices=(-1, ), 
                strides=(2, 2, 2, 2, 2), 
@@ -597,7 +544,6 @@ def ResNeSt200(convolution='conv2d',
                    radix=2,
                    cardinality=1,
                    bottleneck_width=64,
-                   convolution="conv2d",
                    normalization=normalization,
                    last_gamma=last_gamma,
                    activation=activation,
@@ -615,9 +561,8 @@ def ResNeSt200(convolution='conv2d',
                    drop_rate=drop_rate).build_model()
 
 
-@BACKBONES.register("ResNeSt269")
-def ResNeSt269(convolution='conv2d', 
-               normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+@MODELS.register("ResNeSt269")
+def ResNeSt269(normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
                activation=dict(activation="relu"),
                output_indices=(-1, ), 
                strides=(2, 2, 2, 2, 2), 
@@ -638,7 +583,6 @@ def ResNeSt269(convolution='conv2d',
                    radix=2,
                    cardinality=1,
                    bottleneck_width=64,
-                   convolution="conv2d",
                    normalization=normalization,
                    last_gamma=last_gamma,
                    activation=activation,

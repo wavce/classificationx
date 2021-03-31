@@ -7,7 +7,6 @@ from core.layers import build_activation
 
 
 def bottleneckx(inputs,
-                block_index,
                 filters,
                 cardinality,
                 bottleneck_width,
@@ -35,8 +34,7 @@ def bottleneckx(inputs,
                          dropblock=dropblock,
                          normalization=normalization,
                          activation=activation,
-                         name=name + "/conv%d" % block_index)(inputs)
-    block_index += 1
+                         name=name + "/conv1")(inputs)
     x = ConvNormActBlock(filters=group_width,
                          kernel_size=(3, 3),
                          strides=strides,
@@ -47,43 +45,40 @@ def bottleneckx(inputs,
                          normalization=normalization,
                          activation=activation,
                          dropblock=dropblock,
-                         name=name + "/conv%d" % block_index)(x)
-    block_index += 1
-    x = ConvNormActBlock(filters=filters * self.expansion,
+                         name=name + "/conv2")(x)
+    x = ConvNormActBlock(filters=filters * expansion,
                          kernel_size=1,
                          trainable=trainable,
                          data_format=data_format,
                          normalization=normalization,
                          activation=None,
                          dropblock=dropblock,
-                         name=name + "/conv%d" % block_index)(x)
+                         name=name + "/conv3")(x)
     
     if use_se:
         pool_axis = [1, 2] if data_format == "channels_last" else [2, 3]
         se = tf.keras.layers.Lambda(lambda inp: tf.reduce_mean(inp, pool_axis, keepdims=True), 
                                     name=name + "/se/pool")(x)
-        block_index += 1
         se = tf.keras.layers.Conv2D(filters=filters // 4,
                                     kernel_size=(1, 1),
                                     data_format=data_format,
-                                    name=name + "/conv%d" % block_index)(se)
-        block_index += 1
+                                    name=name + "/conv4")(se)
+
         se = tf.keras.layers.Conv2D(filters=filters * expansion,
                                     kernel_size=(1, 1),
                                     data_format=data_format,
-                                    name=name + "/conv%d" % block_index)(se)
+                                    name=name + "/conv5")(se)
         se = tf.keras.layers.Activation("sigmoid", name=name + "/sigmoid")(se)
         x = tf.keras.layers.Multiply(name=name + "/multiply")([x, se])
 
     shortcut = inputs
     if downsample:
-        block_index += 1
         if avg_down:
             shortcut = tf.keras.layers.AvgPool2D(pool_size=strides, 
                                                  strides=strides, 
                                                  padding="same", 
                                                  data_format=data_format, 
-                                                 name=name + "/avg_pool")(shortcut)
+                                                 name=name + "/shorcut/avg_pool")(shortcut)
             shortcut = ConvNormActBlock(kernel_size=1, 
                                         filters=filters * expansion,
                                         trainable=trainable,
@@ -91,7 +86,7 @@ def bottleneckx(inputs,
                                         normalization=normalization,
                                         activation=None,
                                         dropblock=dropblock,
-                                        name=name + "/conv%d" % block_index)(shortcut)
+                                        name=name + "/shortcut")(shortcut)
         else:
             shortcut = ConvNormActBlock(kernel_size=1, 
                                         strides=strides,
@@ -101,9 +96,9 @@ def bottleneckx(inputs,
                                         normalization=normalization,
                                         activation=None,
                                         dropblock=dropblock,
-                                        name=name + "/conv%d" % block_index)(shortcut)
+                                        name=name + "/shortcut")(shortcut)
     x = tf.keras.layers.Add(name=name + "/add")([x, shortcut])
-    x = build_activation(**activation, name=name + "/" + activation["activation"] + str(block_index))(x)
+    x = build_activation(**activation, name=name + "/" + activation["activation"])(x)
     
     return x
             
@@ -133,7 +128,6 @@ class ResNeXt(Model):
                  drop_rate=0.5,
                  **kwargs):
         super(ResNeXt, self).__init__(name,
-                                      convolution=convolution, 
                                       normalization=normalization, 
                                       activation=activation, 
                                       output_indices=output_indices, 
@@ -158,9 +152,9 @@ class ResNeXt(Model):
 
     def build_model(self):
         def _norm(inp):
-            inp -= (tf.convert_to_tensor(self._rgb_mean * 255., inp.dtype))
-            inp /= (tf.convert_to_tensor(self._rgb_std * 255., inp.dtype))
-            return inp
+            mean = tf.constant([0.485, 0.456, 0.406], inp.dtype, [1, 1, 1, 3]) * 255.
+            std = 1. / (tf.constant([0.229, 0.224, 0.225], inp.dtype, [1, 1, 1, 3]) * 255.)
+            return (inp - mean) * std  
 
         x = tf.keras.layers.Lambda(_norm, name="norm_input")(self.img_input)
         if not self.deep_stem:
@@ -171,7 +165,7 @@ class ResNeXt(Model):
                                  trainable=1 not in self.frozen_stages,
                                  kernel_initializer="he_normal",
                                  normalization=self.normalization,
-                                 name="conv0")(x)
+                                 name="stem/conv1")(x)
         else:
             x = ConvNormActBlock(filters=self.stem_filters,
                                  kernel_size=(3, 3),
@@ -180,7 +174,7 @@ class ResNeXt(Model):
                                  trainable=1 not in self.frozen_stages,
                                  kernel_initializer="he_normal",
                                  normalization=self.normalization,
-                                 name="stage0/conv0")(x)
+                                 name="stem/conv1")(x)
             x = ConvNormActBlock(filters=self.stem_filters,
                                  kernel_size=(3, 3),
                                  strides=(1, 1),
@@ -188,7 +182,7 @@ class ResNeXt(Model):
                                  trainable=1 not in self.frozen_stages,
                                  kernel_initializer="he_normal",
                                  normalization=self.normalization,
-                                 name="stage0/conv1")(x)
+                                 name="stem/conv2")(x)
             x = ConvNormActBlock(filters=self.stem_filters * 2,
                                  kernel_size=(7, 7),
                                  strides=(1, 1),
@@ -196,18 +190,18 @@ class ResNeXt(Model):
                                  trainable=1 not in self.frozen_stages,
                                  kernel_initializer="he_normal",
                                  normalization=self.normalization,
-                                 name="stage0/conv2")(x)
+                                 name="stem/conv3")(x)
         
         outputs = [x]
         x = tf.keras.layers.ZeroPadding2D(padding=((1, 1), (1, 1)))(x)
         x = tf.keras.layers.MaxPool2D((3, 3), self.strides[1], "valid", self.data_format)(x)
-        x = self._make_stage(x, 64, self.num_blocks[0], 1, self.dilation_rates[1], 2 not in self.frozen_stages, "stage1")
+        x = self._make_stage(x, 64, self.num_blocks[0], 1, self.dilation_rates[1], 2 not in self.frozen_stages, "layer1")
         outputs.append(x)
-        x = self._make_stage(x, 128, self.num_blocks[1], self.strides[2], self.dilation_rates[2], 3 not in self.frozen_stages, "stage2")
+        x = self._make_stage(x, 128, self.num_blocks[1], self.strides[2], self.dilation_rates[2], 3 not in self.frozen_stages, "layer2")
         outputs.append(x)
-        x = self._make_stage(x, 256, self.num_blocks[2], self.strides[3], self.dilation_rates[3], 4 not in self.frozen_stages, "stage3")
+        x = self._make_stage(x, 256, self.num_blocks[2], self.strides[3], self.dilation_rates[3], 4 not in self.frozen_stages, "layer3")
         outputs.append(x)
-        x = self._make_stage(x, 512, self.num_blocks[3], self.strides[4], self.dilation_rates[4], 5 not in self.frozen_stages, "stage4")
+        x = self._make_stage(x, 512, self.num_blocks[3], self.strides[4], self.dilation_rates[4], 5 not in self.frozen_stages, "layer4")
         outputs.append(x)
         
         if -1 not in self.output_indices:
@@ -224,7 +218,6 @@ class ResNeXt(Model):
     def _make_stage(self, x, filters, num_blocks, strides=1, dilation_rate=1, trainable=True, name=None):
         block_index = 0
         x = self.block_fn(x,
-                          block_index,
                           cardinality=self.cardinality,
                           use_se=self.use_se,
                           bottleneck_width=self.bottleneck_width,
@@ -239,11 +232,10 @@ class ResNeXt(Model):
                           last_gamma=self.last_gamma,
                           avg_down=self.avg_down,
                           data_format=self.data_format,
-                          name=name)
+                          name=name + "/0")
         block_index = block_index + 6 if self.use_se else block_index + 4
-        for _ in range(1, num_blocks):
+        for i in range(1, num_blocks):
             x = self.block_fn(x, 
-                              block_index,
                               cardinality=self.cardinality,
                               use_se=self.use_se,
                               bottleneck_width=self.bottleneck_width,
@@ -258,7 +250,7 @@ class ResNeXt(Model):
                               last_gamma=self.last_gamma,
                               avg_down=self.avg_down,
                               data_format=self.data_format,
-                              name=name)
+                              name=name + "/%d" % i)
             n = 5 if self.use_se else 3
             block_index += n
         return x
@@ -280,7 +272,7 @@ def ResNeXt50_32X4D(normalization=dict(normalization ='batch_norm', momentum =0.
                     **kwargs):
     return ResNeXt("resnext50_32x4d", 
                    deep_stem=False, 
-                   block_fn=BottleneckX, 
+                   block_fn=bottleneckx, 
                    num_blocks=[3, 4, 6, 3], 
                    stem_filters=32, 
                    cardinality=32,
@@ -317,7 +309,7 @@ def ResNeXt101_32X4D(normalization=dict(normalization ='batch_norm', momentum =0
                      drop_rate=0.5):
     return ResNeXt("resnext101_32x4d", 
                    deep_stem=False, 
-                   block_fn=BottleneckX, 
+                   block_fn=bottleneckx, 
                    num_blocks=[3, 4, 23, 3], 
                    stem_filters=32, 
                    cardinality=32,
@@ -353,7 +345,7 @@ def ResNeXt101_64X4D(normalization=dict(normalization ='batch_norm', momentum =0
                      drop_rate=0.5):
     return ResNeXt("resnext101_64x4d", 
                    deep_stem=False, 
-                   block_fn=BottleneckX, 
+                   block_fn=bottleneckx, 
                    num_blocks=[3, 4, 23, 3], 
                    stem_filters=32, 
                    cardinality=64,
@@ -389,7 +381,7 @@ def ResNeXt101B_64X4D(normalization=dict(normalization ='batch_norm', momentum =
                       drop_rate=0.5):
     return ResNeXt("resnext101b_64x4d", 
                    deep_stem=True, 
-                   block_fn=BottleneckX, 
+                   block_fn=bottleneckx, 
                    num_blocks=[3, 4, 23, 3], 
                    stem_filters=32, 
                    cardinality=64,
@@ -425,7 +417,7 @@ def SEResNeXt50_32X4D(normalization=dict(normalization ='batch_norm', momentum =
                       drop_rate=0.5):
     return ResNeXt("se_resnext50_32x4d", 
                    deep_stem=False, 
-                   block_fn=BottleneckX, 
+                   block_fn=bottleneckx, 
                    num_blocks=[3, 4, 6, 3], 
                    stem_filters=32, 
                    cardinality=32,
@@ -461,7 +453,7 @@ def SEResNeXt101_32X4D(normalization=dict(normalization ='batch_norm', momentum 
                        drop_rate=0.5):
     return ResNeXt("se_resnext101_32x4d", 
                    deep_stem=False, 
-                   block_fn=BottleneckX, 
+                   block_fn=bottleneckx, 
                    num_blocks=[3, 4, 23, 3], 
                    stem_filters=32, 
                    cardinality=32,
@@ -497,7 +489,7 @@ def SEResNeXt101_64X4D(normalization=dict(normalization ='batch_norm', momentum 
                        drop_rate=0.5):
     return ResNeXt("se_resnext101_64x4d", 
                    deep_stem=False, 
-                   block_fn=BottleneckX, 
+                   block_fn=bottleneckx, 
                    num_blocks=[3, 4, 23, 3], 
                    stem_filters=32, 
                    cardinality=64,
@@ -534,7 +526,7 @@ def SEResNeXt101E_64X4D(normalization=dict(normalization ='batch_norm', momentum
                         **kwargs):
     return ResNeXt("se_resnext101e_64x4d", 
                    deep_stem=True, 
-                   block_fn=BottleneckX, 
+                   block_fn=bottleneckx, 
                    num_blocks=[3, 4, 23, 3], 
                    stem_filters=32, 
                    cardinality=64,
@@ -557,26 +549,31 @@ def SEResNeXt101E_64X4D(normalization=dict(normalization ='batch_norm', momentum
 
 def _get_weight_name_map(blocks, use_se):
     name_map = {
-        "conv0/conv2d/kernel:0": "resnext0_conv0_weight",
-        "conv0/batch_norm/gamma:0": "resnext0_batchnorm0_gamma",
-        "conv0/batch_norm/beta:0": "resnext0_batchnorm0_beta",
-        "conv0/batch_norm/moving_mean:0": "resnext0_batchnorm0_running_mean",
-        "conv0/batch_norm/moving_variance:0": "resnext0_batchnorm0_running_var"
+        "stem/conv1/conv2d/kernel:0": "resnext0_conv0_weight",
+        "stem/conv1/batch_norm/gamma:0": "resnext0_batchnorm0_gamma",
+        "stem/conv1/batch_norm/beta:0": "resnext0_batchnorm0_beta",
+        "stem/conv1/batch_norm/moving_mean:0": "resnext0_batchnorm0_running_mean",
+        "stem/conv1/batch_norm/moving_variance:0": "resnext0_batchnorm0_running_var"
     }
 
     for i, b in enumerate(blocks, 1):
         n = 0
         for j in range(b):
-            k = 4 if j == 0 else 3
-            k = k + 2 if use_se else k
-            for _ in range(k):
-                name_map["stage%d/conv%d/conv2d/kernel:0" % (i, n)] = "resnext0_stage%d_conv%d_weight" % (i, n)
-                name_map["stage%d/conv%d/batch_norm/gamma:0" % (i, n)] = "resnext0_stage%d_batchnorm%d_gamma" % (i, n)
-                name_map["stage%d/conv%d/batch_norm/beta:0" % (i, n)] = "resnext0_stage%d_batchnorm%d_beta" % (i, n)
-                name_map["stage%d/conv%d/batch_norm/moving_mean:0" % (i, n)] = "resnext0_stage%d_batchnorm%d_running_mean" % (i, n)
-                name_map["stage%d/conv%d/batch_norm/moving_variance:0" % (i, n)] = "resnext0_stage%d_batchnorm%d_running_var" % (i, n)
+            k = 3 + 2 if use_se else 3
+            for m in range(1, k+1):
+                name_map["layer%d/%d/conv%d/conv2d/kernel:0" % (i, j, m)] = "resnext0_stage%d_conv%d_weight" % (i, n)
+                name_map["layer%d/%d/conv%d/batch_norm/gamma:0" % (i, j, m)] = "resnext0_stage%d_batchnorm%d_gamma" % (i, n)
+                name_map["layer%d/%d/conv%d/batch_norm/beta:0" % (i, j, m)] = "resnext0_stage%d_batchnorm%d_beta" % (i, n)
+                name_map["layer%d/%d/conv%d/batch_norm/moving_mean:0" % (i, j, m)] = "resnext0_stage%d_batchnorm%d_running_mean" % (i, n)
+                name_map["layer%d/%d/conv%d/batch_norm/moving_variance:0" % (i, j, m)] = "resnext0_stage%d_batchnorm%d_running_var" % (i, n)
                 n += 1
-                
+            if j == 0:
+                name_map["layer%d/%d/shortcut/conv2d/kernel:0" % (i, j)] = "resnext0_stage%d_conv%d_weight" % (i, n)
+                name_map["layer%d/%d/shortcut/batch_norm/gamma:0" % (i, j)] = "resnext0_stage%d_batchnorm%d_gamma" % (i, n)
+                name_map["layer%d/%d/shortcut/batch_norm/beta:0" % (i, j)] = "resnext0_stage%d_batchnorm%d_beta" % (i, n)
+                name_map["layer%d/%d/shortcut/batch_norm/moving_mean:0" % (i, j)] = "resnext0_stage%d_batchnorm%d_running_mean" % (i, n)
+                name_map["layer%d/%d/shortcut/batch_norm/moving_variance:0" % (i, j)] = "resnext0_stage%d_batchnorm%d_running_var" % (i, n)
+                n += 1
     name_map["logits/kernel:0"] = "resnext0_dense0_weight"
     name_map["logits/bias:0"] = "resnext0_dense0_bias"
     
@@ -585,8 +582,8 @@ def _get_weight_name_map(blocks, use_se):
 
 def _mxnet2h5(model, blocks, name):
     from gluoncv.model_zoo import get_model
-    # from mxnet import nd, image
-    # from gluoncv.data.transforms.presets.imagenet import transform_eval
+    from mxnet import nd, image
+    from gluoncv.data.transforms.presets.imagenet import transform_eval
 
     net = get_model(name, pretrained=True)
 
@@ -594,20 +591,23 @@ def _mxnet2h5(model, blocks, name):
     # for k, v in m_weights.items():
     #     print(k, v.shape)
     
-    # img = image.imread("/home/bail/Documents/pandas.jpg")
-    # img = transform_eval(img)
-    # net = get_model(name, pretrained=True)
-    # pred = net(img)
-    # topK = 5
-    # ind = nd.topk(pred, k=topK)[0].astype('int')
-    # print('The input picture is classified to be')
-    # for i in range(topK):
-    #     print('\t[%s], with probability %.3f.'%
-    #           (ind[i].asscalar(), nd.softmax(pred)[0][ind[i]].asscalar()))
+    img = image.imread("/home/bail/Documents/pandas.jpg")
+    img = transform_eval(img)
+    net = get_model(name, pretrained=True)
+    pred = net(img)
+    topK = 5
+    ind = nd.topk(pred, k=topK)[0].astype('int')
+    print('The input picture is classified to be')
+    for i in range(topK):
+        print('\t[%s], with probability %.3f.'%
+              (ind[i].asscalar(), nd.softmax(pred)[0][ind[i]].asscalar()))
 
     name_map = _get_weight_name_map(blocks, False)
+    # for k, v in name_map.items():
+    #     print(k, v)
     for w in model.weights:            
         mw = m_weights[name_map[w.name]].data().asnumpy()
+        # print(w.name, w.shape.as_list())
         if len(mw.shape) == 4:
             mw = mw.transpose((2, 3, 1, 0))
         
@@ -625,13 +625,13 @@ if __name__ == '__main__':
     _mxnet2h5(model, blocks, name)
     # model.load_weights("/home/bail/Workspace/pretrained_weights/%s/%s.ckpt" % (name, name))
 
-    with tf.io.gfile.GFile("/Users/bailang/Documents/pandas.jpg", "rb") as gf:
+    with tf.io.gfile.GFile("/home/bail/Documents/pandas.jpg", "rb") as gf:
         images = tf.image.decode_jpeg(gf.read())
 
-    images = tf.image.convert_image_dtype(images, tf.float32)
+    images = tf.cast(images, tf.float32)
     images = tf.image.resize(images, (224, 224))[None]
     logits = model(images, training=False)
     probs = tf.nn.softmax(logits)
     print(tf.nn.top_k(tf.squeeze(probs), k=5))
 
-    model.save_weights("/home/bail/Workspace/pretrained_weights/%s.h5" % name)
+    model.save_weights("/home/bail/Data/data2/pretrained_weights/%s.h5" % name)

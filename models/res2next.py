@@ -126,7 +126,6 @@ def bottle2neckx(inputs,
     #     return x
 
 
-
 class Res2NeXt(Model):
     def __init__(self, 
                  name, 
@@ -164,10 +163,9 @@ class Res2NeXt(Model):
 
     def build_model(self):
         def _norm(inp):
-            inp -= (tf.convert_to_tensor(self._rgb_mean * 255., inp.dtype))
-            inp /= (tf.convert_to_tensor(self._rgb_std * 255., inp.dtype))
-         
-            return inp
+            mean = tf.constant([0.485, 0.456, 0.406], inp.dtype, [1, 1, 1, 3]) * 255.
+            std = 1. / (tf.constant([0.229, 0.224, 0.225], inp.dtype, [1, 1, 1, 3]) * 255.)
+            return (inp - mean) * std 
 
         x = tf.keras.layers.Lambda(_norm, name="norm_input")(self.img_input)
         x = ConvNormActBlock(filters=64,

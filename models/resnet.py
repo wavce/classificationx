@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import tensorflow as tf
 from .model import Model
 from .builder import MODELS
@@ -84,6 +85,7 @@ def bottleneck(inputs,
                trainable=True,
                dropblock=None,
                use_conv_shortcut=True,
+               strides_in_1x1=False,
                expansion=4,
                name=None):
     """A residual block.
@@ -101,9 +103,10 @@ def bottleneck(inputs,
                 otherwise identity shortcut.
             name: string, block label.
     """
+    strides_1x1, strides_3x3 = (strides, 1) if strides_in_1x1 else (1, strides)
     x = ConvNormActBlock(filters=filters,
                          kernel_size=1,
-                         strides=1,
+                         strides=strides_1x1,
                          trainable=trainable,
                          dropblock=dropblock,
                          data_format=data_format,
@@ -112,8 +115,8 @@ def bottleneck(inputs,
                          name=name + "/conv1")(inputs)
     x = ConvNormActBlock(filters=filters,
                          kernel_size=3,
-                         strides=strides,
-                         dilation_rate=dilation_rate if strides == 1 else 1,
+                         strides=strides_3x3,
+                         dilation_rate=dilation_rate if strides == 1 or strides_1x1 else 1,
                          trainable=trainable,
                          data_format=data_format,
                          normalization=normalization,
@@ -160,6 +163,7 @@ class ResNet(Model):
                  drop_rate=0.5,
                  input_shape=(224, 224, 3),
                  input_tensor=None,
+                 strides_in_1x1=False,
                  expansion=2,
                  **kwargs):
         super(ResNet, self).__init__(name=name,
@@ -178,14 +182,25 @@ class ResNet(Model):
         self.blocks = blocks
         self.block_fn = block_fn
         self.expansion = expansion
+        self.strides_in_1x1 = strides_in_1x1
+        if strides_in_1x1:
+            self._rgb_mean = np.array([[[]]])
+            self._rgb_std = np.array([[[[1., 1., 1.]]]])
 
     def build_model(self):
+        strides_in_1x1 = self.strides_in_1x1
+        
         def _norm(inp):
-            inp -= (tf.convert_to_tensor(self._rgb_mean * 255., inp.dtype))
-            inp /= (tf.convert_to_tensor(self._rgb_std * 255., inp.dtype))
-            return inp
+            if strides_in_1x1:
+                mean = tf.constant([102.9801, 115.9465, 122.7717], inp.dtype, [1, 1, 1, 3])
+                std = tf.constant([1, 1, 1], inp.dtype, [1, 1, 1, 3])
+            else:
+                mean = tf.constant([0.485, 0.456, 0.406], inp.dtype, [1, 1, 1, 3]) * 255.
+                std = 1. / (tf.constant([0.229, 0.224, 0.225], inp.dtype, [1, 1, 1, 3]) * 255.)
+            return (inp - mean) * std 
 
         x = tf.keras.layers.Lambda(function=_norm, name="norm_input")(self.img_input)
+
         x = ConvNormActBlock(filters=64,
                              kernel_size=(7, 7),
                              strides=self.strides[0],
@@ -231,6 +246,7 @@ class ResNet(Model):
                           trainable=trainable,
                           dropblock=self.dropblock,
                           use_conv_shortcut=use_conv_shortcut,
+                          strides_in_1x1=self.strides_in_1x1,
                           name=name + "/0")
         for i in range(1, blocks):
             x = self.block_fn(inputs=x,
@@ -400,6 +416,103 @@ def ResNet152(normalization=dict(normalization="batch_norm", momentum=0.9, epsil
                   **kwargs).build_model()
 
 
+@MODELS.register("CaffeResNet50")
+def CaffeResNet50(normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+                  activation=dict(activation="relu"),
+                  output_indices=(-1, ),
+                  strides=(2, 2, 2, 2, 2),
+                  dilation_rates=(1, 1, 1, 1, 1),
+                  frozen_stages=(-1, ),
+                  dropblock=None,
+                  num_classes=1000,
+                  drop_rate=0.5,
+                  input_shape=(224, 224, 3),
+                  input_tensor=None,
+                  **kwargs):
+
+    return ResNet(name="resnet50",
+                  blocks=[3, 4, 6, 3],
+                  block_fn=bottleneck,
+                  normalization=normalization,
+                  activation=activation,
+                  output_indices=output_indices,
+                  strides=strides,
+                  dilation_rates=dilation_rates,
+                  frozen_stages=frozen_stages,
+                  dropblock=dropblock,
+                  num_classes=num_classes,
+                  input_shape=input_shape,
+                  expansion=4,
+                  strides_in_1x1=True,
+                  input_tensor=input_tensor,
+                  drop_rate=drop_rate,
+                  **kwargs).build_model()
+
+
+@MODELS.register("CaffeResNet101")
+def CaffeResNet101(normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+                   activation=dict(activation="relu"),
+                   output_indices=(-1, ),
+                   strides=(2, 2, 2, 2, 2),
+                   dilation_rates=(1, 1, 1, 1, 1),
+                   frozen_stages=(-1, ),
+                   dropblock=None,
+                   num_classes=1000,
+                   drop_rate=0.5,
+                   input_shape=(224, 224, 3),
+                   input_tensor=None,
+                   **kwargs):
+    return ResNet(name="resnet101",
+                  blocks=[3, 4, 23, 3],
+                  block_fn=bottleneck,
+                  normalization=normalization,
+                  activation=activation,
+                  output_indices=output_indices,
+                  strides=strides,
+                  dilation_rates=dilation_rates,
+                  frozen_stages=frozen_stages,
+                  dropblock=dropblock,
+                  num_classes=num_classes,
+                  input_shape=input_shape,
+                  input_tensor=input_tensor,
+                  strides_in_1x1=True,
+                  expansion=4,
+                  drop_rate=drop_rate,
+                  **kwargs).build_model()
+
+
+@MODELS.register("CaffeResNet152")
+def CaffeResNet152(normalization=dict(normalization="batch_norm", momentum=0.9, epsilon=1e-5, axis=-1, trainable=True),
+                   activation=dict(activation="relu"),
+                   output_indices=(-1, ),
+                   strides=(2, 2, 2, 2, 2),
+                   dilation_rates=(1, 1, 1, 1, 1),
+                   frozen_stages=(-1, ),
+                   dropblock=None,
+                   num_classes=1000,
+                   drop_rate=0.5,
+                   input_shape=(224, 224, 3),
+                   input_tensor=None,
+                   **kwargs):
+    return ResNet(name="resnet152",
+                  blocks=[3, 8, 36, 3],
+                  block_fn=bottleneck,
+                  normalization=normalization,
+                  activation=activation,
+                  output_indices=output_indices,
+                  strides=strides,
+                  dilation_rates=dilation_rates,
+                  frozen_stages=frozen_stages,
+                  dropblock=dropblock,
+                  num_classes=num_classes,
+                  input_shape=input_shape,
+                  strides_in_1x1=True,
+                  input_tensor=input_tensor,
+                  drop_rate=drop_rate,
+                  expansion=4,
+                  **kwargs).build_model()
+
+
 def _get_weight_name_map(blocks):
     name_map = {
         "stem/conv1/conv2d/kernel:0": "conv1.weight",
@@ -466,7 +579,7 @@ if __name__ == '__main__':
     model = resnet.build_model()
     model(tf.random.uniform([1, 224, 224, 3]))
     # model.summary()
-    _get_weights_from_pretrained(model, "/home/bail/Downloads/%s.pth" % name, blocks)
+    # _get_weights_from_pretrained(model, "/home/bail/Downloads/%s.pth" % name, blocks)
     
     # fuse(model, block_fn)
 
@@ -480,5 +593,6 @@ if __name__ == '__main__':
     print("prob:", top5prob.numpy())
     print("class:", top5class.numpy())
     
+    tf.saved_model.save( model, "./resnet50")
     # model.save_weights("/Users/bailang/Downloads/pretrained_weights/%s.h5" % name)
     # model.save_weights("/Users/bailang/Downloads/pretrained_weights/%s/model.ckpt" % name)
