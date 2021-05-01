@@ -4,6 +4,58 @@ from core.layers import build_activation
 from core.layers import DropBlock2D
 
 
+def squeeze_excitation(inputs, in_filters, se_ratio=0.25, data_format="channels_last", trainable=True, name="se"):
+    """Squeeze and excitation implementation.
+
+        Args:
+            inputs: `Tensor` of size `[batch, channels, height_in, width_in]`.
+            in_filters: `int` number of input filteres before expansion.
+            se_ratio: `float` a se ratio between 0 and 1 for squeeze and excitation.
+            data_format: An optional string from: "channels_last", "channels_first".
+                Defaults to "channels_last".
+        Returns:
+            A `Tensor` of shape `[batch, filters, height_out, width_out]`.
+    """
+    if isinstance(se_ratio, float):
+        num_reduced_filters = max(1, int(in_filters * se_ratio))
+    elif isinstance(se_ratio, int):
+        num_reduced_filters = max(1, in_filters // se_ratio)
+    else:
+        raise ValueError("se_ratio should be `float` or `int`")
+     # Process input
+    if data_format == "channels_first":
+        spatial_dims = [2, 3]
+    else:
+        spatial_dims = [1, 2]
+    x = tf.keras.layers.Lambda(
+        lambda inp: tf.reduce_mean(inp, spatial_dims, keepdims=True), 
+        name=name + "/global_avgpool")(inputs)
+    x = tf.keras.layers.Conv2D(
+        num_reduced_filters,
+        kernel_size=[1, 1],
+        strides=[1, 1],
+        kernel_initializer=tf.keras.initializers.VarianceScaling(),
+        padding="same",
+        activation="relu",
+        data_format=data_format,
+        use_bias=True,
+        trainable=trainable,
+        name=name + "/squeeze")(x)
+    x = tf.keras.layers.Conv2D(
+        in_filters,
+        kernel_size=[1, 1],
+        strides=[1, 1],
+        kernel_initializer=tf.keras.initializers.VarianceScaling(),
+        padding="same",
+        data_format=data_format,
+        activation="sigmoid",
+        trainable=trainable,
+        use_bias=True,
+        name=name + "/excitation")(x)
+
+    return tf.keras.layers.Multiply(name=name + "/multiply")([x, inputs])
+
+
 class ConvNormActBlock(tf.keras.layers.Layer):
     """Conv2D-Norm-Activation block
     
