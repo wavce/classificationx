@@ -34,17 +34,27 @@ ClassificaitonX is an open source 2D image classfication toolbox based on Tensor
 |  Res2Net-DLA-60     |    21.15M    |    4.2    |    21.53    |    5.80     |      |
 |  Res2NeXt-DLA-60    |    17.33M    |    3.6    |    21.55    |    5.86     |      |
 
-#### CrossStageParrialNetwork
+#### CrossStagePartialNetwork
 |       model         |   #Params    |   BFLOPs  | top-1 error | top-5 error | link |
 | :-----------------: | :----------: | :-------: | :---------: | :---------: | :---:|
 |  Darknet-53         |    41.57M    |   18.57   |    22.8    |      6.2     |      |
 |  CSPDarkNet-53      |    27.61M    |   13.07   |    22.8    |      6.4     |      |
 
-#### CrossStageParrialNetwork
+#### ResNeSt
 |    model    | #Params | BFLOPs | top-1 error | top-5 error | link                                                         |
 | :---------: | :-----: | :----: | :---------: | :---------: | ------------------------------------------------------------ |
 | ResNeSt-50  |    -    |   -    |    18.95    |    5.58     | [baidu](https://pan.baidu.com/s/1nz6e_vlsJFxiV6QUZ9lXQQ)[5fzh] |
 | ResNeSt-101 |    -    |   -    |    17.18    |    3.69     | [baidu](https://pan.baidu.com/s/13KpJwYJanIxzZcpTEsVvvg)[utbi] |
 | ResNeSt-200 |    -    |   -    |    16.16    |    3.14     | [baidu](https://pan.baidu.com/s/1cqcBsjADcY7PXv-LZ30AYw)[x2jc] |
 | ResNeSt-269 |    -    |   -    |    15.57    |    3.02     | [baidu](https://pan.baidu.com/s/1bASbT9yVP6tD0H-WkDbsLw)[7bap] |
+
+#### ReXNet
+
+|   model    | #Params | BFLOPs | top-1 error | top-5 error | link                                                         |
+| :--------: | :-----: | :----: | :---------: | :---------: | ------------------------------------------------------------ |
+| ReXNet_0.9 |  4.1M   |  0.35  |    22.8     |     6.5     |                                                              |
+| ReXNet_1.0 |  4.8M   |  0.40  |    22.1     |     6.1     | [baidu](https://pan.baidu.com/s/1tjnR0D1AtcxcwjdI6Sx2VQ)[7j5d] |
+| ReXNet_1.3 |  7.6M   |  0.66  |    20.5     |     5.3     | [baidu](https://pan.baidu.com/s/1tvgIveO3JBSIX3J8jF8vdw)[knir] |
+| ReXNet_1.5 |  9.7M   |  0.88  |    19.7     |     4.8     | [baidu](https://pan.baidu.com/s/1nynsKuuDgcNHmIDNos0UKQ)[vev5] |
+| ReXNet_2.0 |   19M   |  1.8   |    18.4     |     4.3     | [baidu](https://pan.baidu.com/s/1gTRhCiNZ-dv2gpq_nhTkBg)[ayv6] |
 
