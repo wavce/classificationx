@@ -5,6 +5,7 @@ ClassificaitonX is an open source 2D image classfication toolbox based on Tensor
 
 
 ### Changelog
+- 2021.05.19 add resnest, shufflentv1, shufflenetv2.
 - 2021.01.05 Initialized the repository.
 
 ### Model
@@ -18,15 +19,6 @@ ClassificaitonX is an open source 2D image classfication toolbox based on Tensor
 |  ResNet152 |  27.21M    |   22.6    |    21.69    |     5.94    |
 
 #### Res2Net
-```
-@article{gao2019res2net,
-  title={Res2Net: A New Multi-scale Backbone Architecture},
-  author={Gao, Shang-Hua and Cheng, Ming-Ming and Zhao, Kai and Zhang, Xin-Yu and Yang, Ming-Hsuan and Torr, Philip},
-  journal={IEEE TPAMI},
-  year={2020},
-  doi={10.1109/TPAMI.2019.2938758}, 
-}
-```
 
 |       model         |   #Params    |   BFLOPs  | top-1 error | top-5 error | link |
 | :-----------------: | :----------: | :-------: | :---------: | :---------: | :---:|
@@ -43,16 +35,16 @@ ClassificaitonX is an open source 2D image classfication toolbox based on Tensor
 |  Res2NeXt-DLA-60    |    17.33M    |    3.6    |    21.55    |    5.86     |      |
 
 #### CrossStageParrialNetwork
-```
-@inproceedings{wang2020cspnet,
-  title={CSPNet: A new backbone that can enhance learning capability of cnn},
-  author={Wang, Chien-Yao and Mark Liao, Hong-Yuan and Wu, Yueh-Hua and Chen, Ping-Yang and Hsieh, Jun-Wei and Yeh, I-Hau},
-  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops},
-  pages={390--391},
-  year={2020}
-}
-```
 |       model         |   #Params    |   BFLOPs  | top-1 error | top-5 error | link |
 | :-----------------: | :----------: | :-------: | :---------: | :---------: | :---:|
 |  Darknet-53         |    41.57M    |   18.57   |    22.8    |      6.2     |      |
 |  CSPDarkNet-53      |    27.61M    |   13.07   |    22.8    |      6.4     |      |
+
+#### CrossStageParrialNetwork
+|    model    | #Params | BFLOPs | top-1 error | top-5 error | link                                                         |
+| :---------: | :-----: | :----: | :---------: | :---------: | ------------------------------------------------------------ |
+| ResNeSt-50  |    -    |   -    |    18.95    |    5.58     | [baidu](https://pan.baidu.com/s/1nz6e_vlsJFxiV6QUZ9lXQQ)[5fzh] |
+| ResNeSt-101 |    -    |   -    |    17.18    |    3.69     | [baidu](https://pan.baidu.com/s/13KpJwYJanIxzZcpTEsVvvg)[utbi] |
+| ResNeSt-200 |    -    |   -    |    16.16    |    3.14     | [baidu](https://pan.baidu.com/s/1cqcBsjADcY7PXv-LZ30AYw)[x2jc] |
+| ResNeSt-269 |    -    |   -    |    15.57    |    3.02     | [baidu](https://pan.baidu.com/s/1bASbT9yVP6tD0H-WkDbsLw)[7bap] |
+

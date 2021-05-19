@@ -14,9 +14,11 @@ class Model(object):
                  input_shape=None,
                  input_tensor=None,
                  dropblock=None,
+                 kernel_initializer="glorot_uniform",
                  weight_decay=0.0001,
                  num_classes=1000,
-                 drop_rate=0.5):
+                 drop_rate=0.5,
+                 drop_connect_rate=0.):
         """The model base class.
 
         Args:
@@ -31,10 +33,10 @@ class Model(object):
                 e.g. [1, 2, 3] means frozen stage 1, stage 2 and stage 3.
             frozen_batch_normalization: (bool) Does frozen batch normalization.
         """
-        assert isinstance(output_indices, (list, tuple))
-        assert isinstance(strides, (list, tuple))
-        assert isinstance(frozen_stages, (list, tuple))
-        assert isinstance(dilation_rates, (list, tuple))
+        assert isinstance(output_indices, (list, tuple)) or output_indices is None
+        assert isinstance(strides, (list, tuple)) or strides is None
+        assert isinstance(frozen_stages, (list, tuple)) or frozen_stages is None
+        assert isinstance(dilation_rates, (list, tuple)) or dilation_rates is None
 
         self.name = name
         self.output_indices = output_indices
@@ -47,6 +49,8 @@ class Model(object):
         self.weight_decay = weight_decay 
         self.num_classes = num_classes
         self.drop_rate = drop_rate
+        self.drop_connect_rate = drop_connect_rate
+        self.kernel_initializer = kernel_initializer
 
         self._rgb_mean = np.array([0.485, 0.456, 0.406])
         self._rgb_std = np.array([0.229, 0.224, 0.225])

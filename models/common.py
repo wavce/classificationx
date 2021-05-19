@@ -4,7 +4,7 @@ from core.layers import build_activation
 from core.layers import DropBlock2D
 
 
-def squeeze_excitation(inputs, in_filters, se_ratio=0.25, data_format="channels_last", trainable=True, name="se"):
+def squeeze_excitation(inputs, in_filters, se_ratio=0.25, data_format="channels_last", normalization=None, trainable=True, name="se"):
     """Squeeze and excitation implementation.
 
         Args:
@@ -36,11 +36,13 @@ def squeeze_excitation(inputs, in_filters, se_ratio=0.25, data_format="channels_
         strides=[1, 1],
         kernel_initializer=tf.keras.initializers.VarianceScaling(),
         padding="same",
-        activation="relu",
+        activation="relu" if normalization is None else None,
         data_format=data_format,
-        use_bias=True,
         trainable=trainable,
         name=name + "/squeeze")(x)
+    if normalization is not None:
+        x = build_normalization(**normalization, name=name + "/squeeze/norm")(x)
+        x = tf.keras.layers.ReLU(name=name + "/squeeze/relu")(x) 
     x = tf.keras.layers.Conv2D(
         in_filters,
         kernel_size=[1, 1],
@@ -95,8 +97,10 @@ class ConvNormActBlock(tf.keras.layers.Layer):
                  kernel_size, 
                  strides=1, 
                  groups=1,
+                 padding="same",
                  data_format="channels_last", 
                  dilation_rate=1, 
+                 use_bias=False,
                  kernel_initializer="he_normal",
                  trainable=True,
                  normalization=dict(normalization="batch_norm", axis=-1, trainable=True),
@@ -118,12 +122,13 @@ class ConvNormActBlock(tf.keras.layers.Layer):
         self.filters = filters
         self.kernel_size = kernel_size
         self.strides = strides
+        self.padding = padding
         self.dilation_rate = dilation_rate
         self.data_format = data_format
         self.groups = groups
         self.kernel_initializer = kernel_initializer
         self.gamma_zeros = gamma_zeros
-        self.use_bias = normalization is None
+        self.use_bias = normalization is None or use_bias
         if data_format == "channels_first" and normalization:
             normalization["axis"] = 1
         self.normalization = normalization
@@ -132,33 +137,44 @@ class ConvNormActBlock(tf.keras.layers.Layer):
     
     def build(self, input_shape):
 
-        if self.strides == (1, 1):
-            padding = "same"
-        else:
+        if self.strides != (1, 1) and self.padding == "same":
             p = ((self.kernel_size[0] - 1) // 2, (self.kernel_size[1] - 1) // 2)
             self.pad = tf.keras.layers.ZeroPadding2D(p, data_format=self.data_format)
-            padding = "valid"
+            self.padding = "valid"
 
-        self.padding = padding
-        self.conv = tf.keras.layers.Conv2D(filters=self.filters, 
-                                           kernel_size=self.kernel_size, 
-                                           strides=self.strides, 
-                                           padding=padding, 
-                                           data_format=self.data_format, 
-                                           dilation_rate=self.dilation_rate, 
-                                           groups=self.groups,
-                                           use_bias=self.use_bias, 
-                                           trainable=self.trainable,
-                                           kernel_initializer=self.kernel_initializer,
-                                           name="conv2d")
-        if self.gamma_zeros:
-            self.norm = build_normalization(**self.normalization, name=self.normalization["normalization"])
+        self.conv = tf.keras.layers.Conv2D(
+            filters=self.filters, 
+            kernel_size=self.kernel_size, 
+            strides=self.strides, 
+            padding=self.padding, 
+            data_format=self.data_format, 
+            dilation_rate=self.dilation_rate, 
+            groups=self.groups,
+            use_bias=self.use_bias, 
+            trainable=self.trainable,
+            kernel_initializer=self.kernel_initializer,
+            name="conv2d")
+        if self.normalization is not None:
+            if self.gamma_zeros:
+                self.norm_func = build_normalization(
+                    name=self.normalization["normalization"],
+                    **self.normalization)
+            else:
+                self.norm_func = build_normalization(
+                    gamma_initializer="zeros",
+                    name=self.normalization["normalization"],
+                    **self.normalization)
         else:
-            self.norm = build_normalization(**self.normalization,
-                                            gamma_initializer="zeros",
-                                            name=self.normalization["normalization"])
-        self.act = build_activation(**self.activation, name=self.activation["activation"]) if self.activation is not None else None
-        self.dropblock_fn = DropBlock2D(**self.dropblock, name="dropblock") if self.dropblock is not None else None
+            self.norm_func = None
+        self.act_func = (build_activation(
+            name=self.activation["activation"], 
+            **self.activation) 
+            if self.activation is not None else None)
+        self.dropblock_func = (
+            DropBlock2D(**self.dropblock, name="dropblock") 
+            if self.dropblock is not None else None)
+        
+        self.built = True
 
     def call(self, inputs, training=None):
         if hasattr(self, "pad"):
@@ -166,11 +182,12 @@ class ConvNormActBlock(tf.keras.layers.Layer):
         else:
             x = inputs
         x = self.conv(x)
-        x = self.norm(x, training=training)
-        if self.act is not None:
-            x = self.act(x)
+        if self.norm_func is not None:
+            x = self.norm_func(x, training=training)
+        if self.act_func is not None:
+            x = self.act_func(x)
         if self.dropblock is not None:
-            x = self.dropblock_fn(x, training=training)
+            x = self.dropblock_func(x, training=training)
 
         return x
     
@@ -178,12 +195,12 @@ class ConvNormActBlock(tf.keras.layers.Layer):
         # used to store/share parameters to reconstruct the model
         layer_config = dict()
         layer_config.update(self.conv.get_config())
-        if hasattr(self, "norm"):
-            layer_config.update(self.norm.get_config())
-        if hasattr(self, "act"):
-            layer_config.update(self.act.get_config())
-        # if hasattr(self, "dropblock_fn"):
-        #     layer_config.update(self.dropblock_fn.get_config())
+        if hasattr(self, "norm_func"):
+            layer_config.update(self.norm_func.get_config())
+        if hasattr(self, "act_func"):
+            layer_config.update(self.act_func.get_config())
+        # if hasattr(self, "dropblock_func"):
+        #     layer_config.update(self.dropblock_func.get_config())
 
         return layer_config
     
@@ -193,8 +210,8 @@ class ConvNormActBlock(tf.keras.layers.Layer):
         else:
             x = inputs
         x = self.conv(x)
-        if self.act is not None:
-            x = self.act(x)
+        if self.act_func is not None:
+            x = self.act_func(x)
         
         return x
 
@@ -208,6 +225,7 @@ class DepthwiseConvNormActBlock(tf.keras.layers.Layer):
                  data_format="channels_last", 
                  dilation_rate=1, 
                  kernel_initializer="he_normal",
+                 use_bias=False,
                  trainable=True,
                  normalization=dict(axis=-1, trainable=True),
                  activation=None,
@@ -229,7 +247,7 @@ class DepthwiseConvNormActBlock(tf.keras.layers.Layer):
         self.dilation_rate = dilation_rate
         self.data_format = data_format
         self.kernel_initializer = kernel_initializer
-        self.use_bias = normalization is None
+        self.use_bias = normalization is None or use_bias
         if data_format == "channels_first" and normalization:
             normalization["axis"] = 1
         self.normalization = normalization
@@ -242,18 +260,29 @@ class DepthwiseConvNormActBlock(tf.keras.layers.Layer):
             p = ((self.kernel_size[0] - 1) // 2, (self.kernel_size[1] - 1) // 2)
             self.pad = tf.keras.layers.ZeroPadding2D(p, data_format=self.data_format)
 
-        self.conv = tf.keras.layers.DepthwiseConv2D(kernel_size=self.kernel_size, 
-                                                    strides=self.strides, 
-                                                    padding="valid", 
-                                                    data_format=self.data_format, 
-                                                    dilation_rate=self.dilation_rate, 
-                                                    use_bias=self.use_bias, 
-                                                    trainable=self.trainable,
-                                                    kernel_initializer=self.kernel_initializer,
-                                                    name="conv2d")
-        self.norm = build_normalization(**self.normalization, name=self.normalization["normalization"])
-        self.act = build_activation(**self.activation, name=self.activation["activation"]) if self.activation is not None else None
-        self.dropblock_fn = DropBlock2D(**self.dropblock, name="dropblock") if self.dropblock is not None else None
+        self.conv = tf.keras.layers.DepthwiseConv2D(
+            kernel_size=self.kernel_size, 
+            strides=self.strides, 
+            padding="valid", 
+            data_format=self.data_format, 
+            dilation_rate=self.dilation_rate, 
+            use_bias=self.use_bias, 
+            trainable=self.trainable,
+            kernel_initializer=self.kernel_initializer,
+            name="conv2d")
+        self.norm_func = (
+            build_normalization(
+                name=self.normalization["normalization"],
+                **self.normalization) 
+            if self.normalization is not None else None)
+        self.act_func = (
+            build_activation(
+                name=self.activation["activation"],
+                **self.activation) 
+            if self.activation is not None else None)
+        self.dropblock_func = (
+            DropBlock2D(name="dropblock", **self.dropblock) 
+            if self.dropblock is not None else None)
 
     def call(self, inputs, training=None):
         if hasattr(self, "pad"):
@@ -261,12 +290,13 @@ class DepthwiseConvNormActBlock(tf.keras.layers.Layer):
         else:
             x = inputs
         x = self.conv(x)
-        x = self.norm(x, training=training)
-        if self.act is not None:
-            x = self.act(x)
+        if self.norm_func is not None:
+            x = self.norm_func(x, training=training)
+        if self.act_func is not None:
+            x = self.act_func(x)
         
         if self.dropblock is not None:
-            x = self.dropblock_fn(x, training=training)
+            x = self.dropblock_func(x, training=training)
 
         return x
     
@@ -274,23 +304,24 @@ class DepthwiseConvNormActBlock(tf.keras.layers.Layer):
         # used to store/share parameters to reconstruct the model
         layer_config = dict()
         layer_config.update(self.conv.get_config())
-        if hasattr(self, "norm"):
-            layer_config.update(self.norm.get_config())
-        if hasattr(self, "act"):
-            layer_config.update(self.act.get_config())
-        # if hasattr(self, "dropblock_fn"):
-        #     layer_config.update(self.dropblock_fn.get_config())
+        if hasattr(self, "norm_func"):
+            layer_config.update(self.norm_func.get_config())
+        if hasattr(self, "act_func"):
+            layer_config.update(self.act_func.get_config())
+        # if hasattr(self, "dropblock_func"):
+        #     layer_config.update(self.dropblock_func.get_config())
 
         return layer_config
 
 
 def fuse_conv_and_bn(conv, bn):
-    fused_conv = tf.keras.layers.Conv2D(filters=conv.filters,
-                                        kernel_size=conv.kernel_size,
-                                        strides=conv.strides,
-                                        padding=conv.padding,
-                                        dilation_rate=conv.dilation_rate,
-                                        use_bias=True)
+    fused_conv = tf.keras.layers.Conv2D(
+        filters=conv.filters,
+        kernel_size=conv.kernel_size,
+        strides=conv.strides,
+        padding=conv.padding,
+        dilation_rate=conv.dilation_rate,
+        use_bias=True)
     kernel_shape = tf.shape(conv.kernel)
     fused_conv(tf.random.uniform([1, 32, 32, kernel_shape[-2]]))
     
@@ -319,12 +350,14 @@ def fuse(model, building_block):
     for l in model.layers:
         if isinstance(l, building_block):
             for ll in l.layers:
-                if isinstance(ll, ConvNormActBlock) and isinstance(ll.norm, tf.keras.layers.BatchNormalization):
+                if (isinstance(ll, ConvNormActBlock) and 
+                    isinstance(ll.norm, tf.keras.layers.BatchNormalization)):
                     if ll.conv.groups == 1:
                         ll.conv = fuse_conv_and_bn(ll.conv, ll.norm)
                         ll.norm = None
                         ll.call = ll.fused_call
-        if isinstance(l, ConvNormActBlock) and isinstance(l.norm, tf.keras.layers.BatchNormalization):
+        if (isinstance(l, ConvNormActBlock) and 
+            isinstance(l.norm, tf.keras.layers.BatchNormalization)):
             l.conv = fuse_conv_and_bn(l.conv, l.norm)
             l.norm = None
             l.call = l.fused_call

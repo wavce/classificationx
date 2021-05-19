@@ -3,7 +3,6 @@ import tensorflow as tf
 from .model import Model
 from .builder import MODELS
 from core.layers import build_activation
-from core.layers import build_convolution
 from core.layers import build_normalization
 
 

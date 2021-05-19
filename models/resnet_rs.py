@@ -247,20 +247,21 @@ class ResNetRS(Model):
                  use_resnetd_shortcut=True,
                  expansion=4,
                  **kwargs):
-        super(ResNetRS, self).__init__(name=name,
-                                       normalization=normalization,
-                                       activation=activation,
-                                       strides=strides,
-                                       kernel_initializer=kernel_initializer,
-                                       dilation_rates=dilation_rates,
-                                       frozen_stages=frozen_stages,
-                                       dropblock=dropblock,
-                                       num_classes=num_classes,
-                                       input_shape=input_shape,
-                                       input_tensor=input_tensor,
-                                       drop_rate=drop_rate,
-                                       drop_connect_rate=drop_connect_rate,
-                                       **kwargs)
+        super().__init__(
+            name=name,
+            normalization=normalization,
+            activation=activation,
+            strides=strides,
+            kernel_initializer=kernel_initializer,
+            dilation_rates=dilation_rates,
+            frozen_stages=frozen_stages,
+            dropblock=dropblock,
+            num_classes=num_classes,
+            input_shape=input_shape,
+            input_tensor=input_tensor,
+            drop_rate=drop_rate,
+            drop_connect_rate=drop_connect_rate,
+            **kwargs)
         self.blocks = blocks
         self.block_fn = block_fn
         self.expansion = expansion
@@ -287,62 +288,68 @@ class ResNetRS(Model):
         x = tf.keras.layers.Lambda(function=_norm, name="norm_input")(self.img_input)
 
         if self.use_resnetd_stem:
-            x = ConvNormActBlock(filters=32,
-                                 kernel_size=3,
-                                 strides=self.strides[0],
-                                 dilation_rate=self.dilation_rates[0] if self.strides[0] == 1 else 1,
-                                 trainable=1 not in self.frozen_stages,
-                                 kernel_initializer=self.kernel_initializer,
-                                 normalization=self.normalization,
-                                 activation=self.activation,
-                                 data_format=self.data_format,
-                                 name="stem/conv1")(x)
-            x = ConvNormActBlock(filters=32,
-                                 kernel_size=3,
-                                 strides=1,
-                                 dilation_rate=self.dilation_rates[0],
-                                 trainable=1 not in self.frozen_stages,
-                                 kernel_initializer=self.kernel_initializer,
-                                 normalization=self.normalization,
-                                 activation=self.activation,
-                                 data_format=self.data_format,
-                                 name="stem/conv2")(x)
-            x = ConvNormActBlock(filters=64,
-                                 kernel_size=3,
-                                 strides=1,
-                                 dilation_rate=self.dilation_rates[0],
-                                 trainable=1 not in self.frozen_stages,
-                                 kernel_initializer=self.kernel_initializer,
-                                 normalization=None if self.preactivation else self.normalization,
-                                 activation=None if self.preactivation else self.activation,
-                                 data_format=self.data_format,
-                                 name="stem/conv3")(x)
+            x = ConvNormActBlock(
+                filters=32,
+                kernel_size=3,
+                strides=self.strides[0],
+                dilation_rate=self.dilation_rates[0] if self.strides[0] == 1 else 1,
+                trainable=1 not in self.frozen_stages,
+                kernel_initializer=self.kernel_initializer,
+                normalization=self.normalization,
+                activation=self.activation,
+                data_format=self.data_format,
+                name="stem/conv1")(x)
+            x = ConvNormActBlock(
+                filters=32,
+                kernel_size=3,
+                strides=1,
+                dilation_rate=self.dilation_rates[0],
+                trainable=1 not in self.frozen_stages,
+                kernel_initializer=self.kernel_initializer,
+                normalization=self.normalization,
+                activation=self.activation,
+                data_format=self.data_format,
+                name="stem/conv2")(x)
+            x = ConvNormActBlock(
+                filters=64,
+                kernel_size=3,
+                strides=1,
+                dilation_rate=self.dilation_rates[0],
+                trainable=1 not in self.frozen_stages,
+                kernel_initializer=self.kernel_initializer,
+                normalization=None if self.preactivation else self.normalization,
+                activation=None if self.preactivation else self.activation,
+                data_format=self.data_format,
+                name="stem/conv3")(x)
         else:
-            x = ConvNormActBlock(filters=64,
-                                 kernel_size=7,
-                                 strides=self.strides[0],
-                                 dilation_rate=self.dilation_rates[0] if self.strides[0] == 1 else 1,
-                                 trainable=1 not in self.frozen_stages,
-                                 kernel_initializer=self.kernel_initializer,
-                                 normalization=None if self.preactivation else self.normalization,
-                                 activation=None if self.preactivation else self.activation,
-                                 data_format=self.data_format,
-                                 name="stem/conv1")(x)
+            x = ConvNormActBlock(
+                filters=64,
+                kernel_size=7,
+                strides=self.strides[0],
+                dilation_rate=self.dilation_rates[0] if self.strides[0] == 1 else 1,
+                trainable=1 not in self.frozen_stages,
+                kernel_initializer=self.kernel_initializer,
+                normalization=None if self.preactivation else self.normalization,
+                activation=None if self.preactivation else self.activation,
+                data_format=self.data_format,
+                name="stem/conv1")(x)
         
         if not self.skip_stem_max_pool:
             if self.replace_stem_max_pool:
-                x = ConvNormActBlock(filters=64,
-                                     kernel_size=3,
-                                     strides=self.strides[1],
-                                     dilation_rate=1,
-                                     trainable=1 not in self.frozen_stages,
-                                     kernel_initializer=self.kernel_initializer,
-                                     normalization=None if self.preactivation else self.normalization,
-                                     activation=None if self.preactivation else self.activation,
-                                     data_format=self.data_format,
-                                     name="stem/maxpool")(x)
+                x = ConvNormActBlock(
+                    filters=64,
+                    kernel_size=3,
+                    strides=self.strides[1],
+                    dilation_rate=1,
+                    trainable=1 not in self.frozen_stages,
+                    kernel_initializer=self.kernel_initializer,
+                    normalization=None if self.preactivation else self.normalization,
+                    activation=None if self.preactivation else self.activation,
+                    data_format=self.data_format,
+                    name="stem/maxpool")(x)
             else:
-                x = tf.keras.layers.MaxPool2D(3, self.strides[1], "same", self.data_format, name="stem/maxpool")(x)
+                x = tf.keras.layers.MaxPool2D(
+                    3, self.strides[1], "same", self.data_format, name="stem/maxpool")(x)
 
         self.in_filters = 64 
         trainable = 2 not in self.frozen_stages
@@ -368,36 +375,38 @@ class ResNetRS(Model):
         use_conv_shortcut = False
         if strides != 1 or self.in_filters != filters * self.expansion:
             use_conv_shortcut = True
-        x = self.block_fn(inputs=x,
-                          filters=filters,
-                          strides=strides,
-                          dilation_rate=dilation_rate,
-                          kernel_initializer=self.kernel_initializer,
-                          normalization=self.normalization,
-                          init_gamma_zero=self.init_gamma_zero,
-                          activation=self.activation,
-                          trainable=trainable,
-                          dropblock=self.dropblock,
-                          drop_connect_rate=get_drop_connect_rate(self.drop_connect_rate, self.blockd_idx, self.num_blocks),
-                          use_conv_shortcut=use_conv_shortcut,
-                          se_ratio=self.se_ratio,
-                          name=name + "/0")
+        x = self.block_fn(
+            inputs=x,
+            filters=filters,
+            strides=strides,
+            dilation_rate=dilation_rate,
+            kernel_initializer=self.kernel_initializer,
+            normalization=self.normalization,
+            init_gamma_zero=self.init_gamma_zero,
+            activation=self.activation,
+            trainable=trainable,
+            dropblock=self.dropblock,
+            drop_connect_rate=get_drop_connect_rate(self.drop_connect_rate, self.blockd_idx, self.num_blocks),
+            use_conv_shortcut=use_conv_shortcut,
+            se_ratio=self.se_ratio,
+            name=name + "/0")
         self.blockd_idx += 1
         for i in range(1, blocks):
-            x = self.block_fn(inputs=x,
-                              filters=filters,
-                              strides=1,
-                              dilation_rate=dilation_rate,
-                              kernel_initializer=self.kernel_initializer,
-                              normalization=self.normalization,
-                              activation=self.activation,
-                              trainable=trainable,
-                              init_gamma_zero=self.init_gamma_zero,
-                              dropblock=self.dropblock,
-                              use_conv_shortcut=False,
-                              se_ratio=self.se_ratio,
-                              drop_connect_rate=get_drop_connect_rate(self.drop_connect_rate, self.blockd_idx, self.num_blocks),
-                              name=name + "/%d" % i)
+            x = self.block_fn(
+                inputs=x,
+                filters=filters,
+                strides=1,
+                dilation_rate=dilation_rate,
+                kernel_initializer=self.kernel_initializer,
+                normalization=self.normalization,
+                activation=self.activation,
+                trainable=trainable,
+                init_gamma_zero=self.init_gamma_zero,
+                dropblock=self.dropblock,
+                use_conv_shortcut=False,
+                se_ratio=self.se_ratio,
+                drop_connect_rate=get_drop_connect_rate(self.drop_connect_rate, self.blockd_idx, self.num_blocks),
+                name=name + "/%d" % i)
             self.blockd_idx += 1
         return x
 
@@ -416,27 +425,28 @@ def ResNetRS50(normalization=dict(normalization="batch_norm", momentum=0.9, epsi
                input_tensor=None,
                **kwargs):
 
-    return ResNetRS(name="resnet_rs_50",
-                    blocks=[3, 4, 6, 3],
-                    block_fn=bottleneck,
-                    normalization=normalization,
-                    activation=activation,
-                    strides=strides,
-                    dilation_rates=dilation_rates,
-                    frozen_stages=frozen_stages,
-                    dropblock=dropblock,
-                    num_classes=num_classes,
-                    input_shape=input_shape,
-                    expansion=4,
-                    input_tensor=input_tensor,
-                    drop_rate=drop_rate,
-                    drop_connect_rate=drop_connect_rate,
-                    use_resnetd_stem=True,
-                    replace_stem_max_pool=True,
-                    skip_stem_max_pool=False,
-                    use_resnetd_shortcut=True,
-                    se_ratio=0.25,
-                    **kwargs).build_model()
+    return ResNetRS(
+        name="resnet_rs_50",
+        blocks=[3, 4, 6, 3],
+        block_fn=bottleneck,
+        normalization=normalization,
+        activation=activation,
+        strides=strides,
+        dilation_rates=dilation_rates,
+        frozen_stages=frozen_stages,
+        dropblock=dropblock,
+        num_classes=num_classes,
+        input_shape=input_shape,
+        expansion=4,
+        input_tensor=input_tensor,
+        drop_rate=drop_rate,
+        drop_connect_rate=drop_connect_rate,
+        use_resnetd_stem=True,
+        replace_stem_max_pool=True,
+        skip_stem_max_pool=False,
+        use_resnetd_shortcut=True,
+        se_ratio=0.25,
+        **kwargs).build_model()
 
 
 @MODELS.register("ResNetRS101")
@@ -453,27 +463,28 @@ def ResNetRS101(normalization=dict(normalization="batch_norm", momentum=0.9, eps
                 input_tensor=None,
                 **kwargs):
 
-    return ResNetRS(name="resnet_rs_101",
-                    blocks=[3, 4, 23, 3],
-                    block_fn=bottleneck,
-                    normalization=normalization,
-                    activation=activation,
-                    strides=strides,
-                    dilation_rates=dilation_rates,
-                    frozen_stages=frozen_stages,
-                    dropblock=dropblock,
-                    num_classes=num_classes,
-                    input_shape=input_shape,
-                    expansion=4,
-                    input_tensor=input_tensor,
-                    drop_rate=drop_rate,
-                    drop_connect_rate=drop_connect_rate,
-                    use_resnetd_stem=True,
-                    replace_stem_max_pool=True,
-                    skip_stem_max_pool=False,
-                    use_resnetd_shortcut=True,
-                    se_ratio=0.25,
-                    **kwargs).build_model()
+    return ResNetRS(
+        name="resnet_rs_101",
+        blocks=[3, 4, 23, 3],
+        block_fn=bottleneck,
+        normalization=normalization,
+        activation=activation,
+        strides=strides,
+        dilation_rates=dilation_rates,
+        frozen_stages=frozen_stages,
+        dropblock=dropblock,
+        num_classes=num_classes,
+        input_shape=input_shape,
+        expansion=4,
+        input_tensor=input_tensor,
+        drop_rate=drop_rate,
+        drop_connect_rate=drop_connect_rate,
+        use_resnetd_stem=True,
+        replace_stem_max_pool=True,
+        skip_stem_max_pool=False,
+        use_resnetd_shortcut=True,
+        se_ratio=0.25,
+        **kwargs).build_model()
 
 
 @MODELS.register("ResNetRS152")
@@ -490,27 +501,28 @@ def ResNetRS152(normalization=dict(normalization="batch_norm", momentum=0.9, eps
                 input_tensor=None,
                 **kwargs):
 
-    return ResNetRS(name="resnet_rs_152",
-                    blocks=[3, 8, 36, 3],
-                    block_fn=bottleneck,
-                    normalization=normalization,
-                    activation=activation,
-                    strides=strides,
-                    dilation_rates=dilation_rates,
-                    frozen_stages=frozen_stages,
-                    dropblock=dropblock,
-                    num_classes=num_classes,
-                    input_shape=input_shape,
-                    expansion=4,
-                    input_tensor=input_tensor,
-                    drop_rate=drop_rate,
-                    drop_connect_rate=drop_connect_rate,
-                    use_resnetd_stem=True,
-                    replace_stem_max_pool=True,
-                    skip_stem_max_pool=False,
-                    use_resnetd_shortcut=True,
-                    se_ratio=0.25,
-                    **kwargs).build_model()
+    return ResNetRS(
+        name="resnet_rs_152",
+        blocks=[3, 8, 36, 3],
+        block_fn=bottleneck,
+        normalization=normalization,
+        activation=activation,
+        strides=strides,
+        dilation_rates=dilation_rates,
+        frozen_stages=frozen_stages,
+        dropblock=dropblock,
+        num_classes=num_classes,
+        input_shape=input_shape,
+        expansion=4,
+        input_tensor=input_tensor,
+        drop_rate=drop_rate,
+        drop_connect_rate=drop_connect_rate,
+        use_resnetd_stem=True,
+        replace_stem_max_pool=True,
+        skip_stem_max_pool=False,
+        use_resnetd_shortcut=True,
+        se_ratio=0.25,
+        **kwargs).build_model()
 
 
 @MODELS.register("ResNetRS200")
@@ -527,27 +539,28 @@ def ResNetRS200(normalization=dict(normalization="batch_norm", momentum=0.9, eps
                 input_tensor=None,
                 **kwargs):
 
-    return ResNetRS(name="resnet_rs_200",
-                    blocks=[3, 24, 36, 3],
-                    block_fn=bottleneck,
-                    normalization=normalization,
-                    activation=activation,
-                    strides=strides,
-                    dilation_rates=dilation_rates,
-                    frozen_stages=frozen_stages,
-                    dropblock=dropblock,
-                    num_classes=num_classes,
-                    input_shape=input_shape,
-                    expansion=4,
-                    input_tensor=input_tensor,
-                    drop_rate=drop_rate,
-                    drop_connect_rate=drop_connect_rate,
-                    use_resnetd_stem=True,
-                    replace_stem_max_pool=True,
-                    skip_stem_max_pool=False,
-                    use_resnetd_shortcut=True,
-                    se_ratio=0.25,
-                    **kwargs).build_model()
+    return ResNetRS(
+        name="resnet_rs_200",
+        blocks=[3, 24, 36, 3],
+        block_fn=bottleneck,
+        normalization=normalization,
+        activation=activation,
+        strides=strides,
+        dilation_rates=dilation_rates,
+        frozen_stages=frozen_stages,
+        dropblock=dropblock,
+        num_classes=num_classes,
+        input_shape=input_shape,
+        expansion=4,
+        input_tensor=input_tensor,
+        drop_rate=drop_rate,
+        drop_connect_rate=drop_connect_rate,
+        use_resnetd_stem=True,
+        replace_stem_max_pool=True,
+        skip_stem_max_pool=False,
+        use_resnetd_shortcut=True,
+        se_ratio=0.25,
+        **kwargs).build_model()
 
 
 @MODELS.register("ResNetRS270")
@@ -564,27 +577,28 @@ def ResNetRS270(normalization=dict(normalization="batch_norm", momentum=0.9, eps
                 input_tensor=None,
                 **kwargs):
 
-    return ResNetRS(name="resnet_rs_270",
-                    blocks=[4, 29, 53, 4],
-                    block_fn=bottleneck,
-                    normalization=normalization,
-                    activation=activation,
-                    strides=strides,
-                    dilation_rates=dilation_rates,
-                    frozen_stages=frozen_stages,
-                    dropblock=dropblock,
-                    num_classes=num_classes,
-                    input_shape=input_shape,
-                    expansion=4,
-                    input_tensor=input_tensor,
-                    drop_rate=drop_rate,
-                    drop_connect_rate=drop_connect_rate,
-                    use_resnetd_stem=True,
-                    replace_stem_max_pool=True,
-                    skip_stem_max_pool=False,
-                    use_resnetd_shortcut=True,
-                    se_ratio=0.25,
-                    **kwargs).build_model()
+    return ResNetRS(
+        name="resnet_rs_270",
+        blocks=[4, 29, 53, 4],
+        block_fn=bottleneck,
+        normalization=normalization,
+        activation=activation,
+        strides=strides,
+        dilation_rates=dilation_rates,
+        frozen_stages=frozen_stages,
+        dropblock=dropblock,
+        num_classes=num_classes,
+        input_shape=input_shape,
+        expansion=4,
+        input_tensor=input_tensor,
+        drop_rate=drop_rate,
+        drop_connect_rate=drop_connect_rate,
+        use_resnetd_stem=True,
+        replace_stem_max_pool=True,
+        skip_stem_max_pool=False,
+        use_resnetd_shortcut=True,
+        se_ratio=0.25,
+        **kwargs).build_model()
 
 
 @MODELS.register("ResNetRS350")
@@ -601,27 +615,28 @@ def ResNetRS350(normalization=dict(normalization="batch_norm", momentum=0.9, eps
                 input_tensor=None,
                 **kwargs):
 
-    return ResNetRS(name="resnet_rs_350",
-                    blocks=[4, 36, 72, 4],
-                    block_fn=bottleneck,
-                    normalization=normalization,
-                    activation=activation,
-                    strides=strides,
-                    dilation_rates=dilation_rates,
-                    frozen_stages=frozen_stages,
-                    dropblock=dropblock,
-                    num_classes=num_classes,
-                    input_shape=input_shape,
-                    expansion=4,
-                    input_tensor=input_tensor,
-                    drop_rate=drop_rate,
-                    drop_connect_rate=drop_connect_rate,
-                    use_resnetd_stem=True,
-                    replace_stem_max_pool=True,
-                    skip_stem_max_pool=False,
-                    use_resnetd_shortcut=True,
-                    se_ratio=0.25,
-                    **kwargs).build_model()
+    return ResNetRS(
+        name="resnet_rs_350",
+        blocks=[4, 36, 72, 4],
+        block_fn=bottleneck,
+        normalization=normalization,
+        activation=activation,
+        strides=strides,
+        dilation_rates=dilation_rates,
+        frozen_stages=frozen_stages,
+        dropblock=dropblock,
+        num_classes=num_classes,
+        input_shape=input_shape,
+        expansion=4,
+        input_tensor=input_tensor,
+        drop_rate=drop_rate,
+        drop_connect_rate=drop_connect_rate,
+        use_resnetd_stem=True,
+        replace_stem_max_pool=True,
+        skip_stem_max_pool=False,
+        use_resnetd_shortcut=True,
+        se_ratio=0.25,
+        **kwargs).build_model()
 
 
 @MODELS.register("ResNetRS420")
@@ -638,27 +653,28 @@ def ResNetRS420(normalization=dict(normalization="batch_norm", momentum=0.9, eps
                 input_tensor=None,
                 **kwargs):
 
-    return ResNetRS(name="resnet_rs_420",
-                    blocks=[4, 44, 87, 4],
-                    block_fn=bottleneck,
-                    normalization=normalization,
-                    activation=activation,
-                    strides=strides,
-                    dilation_rates=dilation_rates,
-                    frozen_stages=frozen_stages,
-                    dropblock=dropblock,
-                    num_classes=num_classes,
-                    input_shape=input_shape,
-                    expansion=4,
-                    input_tensor=input_tensor,
-                    drop_rate=drop_rate,
-                    drop_connect_rate=drop_connect_rate,
-                    use_resnetd_stem=True,
-                    replace_stem_max_pool=True,
-                    skip_stem_max_pool=False,
-                    use_resnetd_shortcut=True,
-                    se_ratio=0.25,
-                    **kwargs).build_model()
+    return ResNetRS(
+        name="resnet_rs_420",
+        blocks=[4, 44, 87, 4],
+        block_fn=bottleneck,
+        normalization=normalization,
+        activation=activation,
+        strides=strides,
+        dilation_rates=dilation_rates,
+        frozen_stages=frozen_stages,
+        dropblock=dropblock,
+        num_classes=num_classes,
+        input_shape=input_shape,
+        expansion=4,
+        input_tensor=input_tensor,
+        drop_rate=drop_rate,
+        drop_connect_rate=drop_connect_rate,
+        use_resnetd_stem=True,
+        replace_stem_max_pool=True,
+        skip_stem_max_pool=False,
+        use_resnetd_shortcut=True,
+        se_ratio=0.25,
+        **kwargs).build_model()
 
 
 def _get_weight_name_map(blocks):
